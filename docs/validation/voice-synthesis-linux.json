@@ -1,0 +1,38 @@
+[
+  {
+    "voice": "en_US-ljspeech-medium",
+    "seconds": 4.32,
+    "rms": 4274.1,
+    "sample_rate": 22050
+  },
+  {
+    "voice": "en_US-john-medium",
+    "seconds": 5.65,
+    "rms": 4408.4,
+    "sample_rate": 22050
+  },
+  {
+    "voice": "en_US-kristin-medium",
+    "seconds": 4.28,
+    "rms": 4945.5,
+    "sample_rate": 22050
+  },
+  {
+    "voice": "hu_HU-anna-medium",
+    "seconds": 4.27,
+    "rms": 6155.4,
+    "sample_rate": 22050
+  },
+  {
+    "voice": "hu_HU-berta-medium",
+    "seconds": 3.73,
+    "rms": 5366.3,
+    "sample_rate": 22050
+  },
+  {
+    "voice": "hu_HU-imre-medium",
+    "seconds": 4.27,
+    "rms": 3440.2,
+    "sample_rate": 22050
+  }
+]

@@ -1,0 +1,44 @@
+[
+  {
+    "voice": "en_US-ljspeech-medium",
+    "initialMs": 2282,
+    "warmMs": 612,
+    "firstWavBytes": 117920,
+    "secondWavBytes": 121504
+  },
+  {
+    "voice": "en_US-john-medium",
+    "initialMs": 2407,
+    "warmMs": 765,
+    "firstWavBytes": 147104,
+    "secondWavBytes": 149664
+  },
+  {
+    "voice": "en_US-kristin-medium",
+    "initialMs": 2269,
+    "warmMs": 622,
+    "firstWavBytes": 120480,
+    "secondWavBytes": 120992
+  },
+  {
+    "voice": "hu_HU-anna-medium",
+    "initialMs": 1451,
+    "warmMs": 466,
+    "firstWavBytes": 108192,
+    "secondWavBytes": 111776
+  },
+  {
+    "voice": "hu_HU-berta-medium",
+    "initialMs": 1170,
+    "warmMs": 522,
+    "firstWavBytes": 103584,
+    "secondWavBytes": 106656
+  },
+  {
+    "voice": "hu_HU-imre-medium",
+    "initialMs": 1247,
+    "warmMs": 526,
+    "firstWavBytes": 102048,
+    "secondWavBytes": 103584
+  }
+]

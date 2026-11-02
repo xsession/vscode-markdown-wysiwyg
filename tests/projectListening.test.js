@@ -1,0 +1,18 @@
+const assert=require('assert'),Module=require('module');const load=Module._load,results=[],opens=[],updates=[],values=new Map();let current={uri:'file:///a.md',title:'A',text:'# A\nBody text.',line:1,index:1,total:3,bookmarks:[]};
+const vscode={workspace:{isTrusted:true,asRelativePath:u=>u.path},window:{visibleTextEditors:[]},Uri:{parse:s=>({path:s.replace('file://',''),toString:()=>s})}};
+Module._load=function(n,...args){if(n==='vscode')return vscode;return load.call(this,n,...args);};const{ProjectListening}=require('../out/projectListening');Module._load=load;
+const reader={snapshot:()=>current,rawSource:()=>current.text,open:async(text,title,uri,auto,line)=>{opens.push({uri,line});current={...current,uri,title,text,line:line||0};},updateProject:v=>updates.push(v),projectResult:(kind,text,sources)=>results.push({kind,text,sources}),control:async()=>{},jumpToLine:async line=>current.line=line,speakInformation:async()=>{}};
+const sources=[{uri:'file:///a.md',title:'A',text:'# A\nBody text.'},{uri:'file:///b.md',title:'B',text:'# B\nRequires A.'}];
+const explorer={sourceTransform:(u,t)=>t,documents:()=>sources,refresh:async()=>{},updateListening(){}};
+const assistant={verify:async()=>({manifest:{model:{name:'test'}}}),generate:async()=> 'A grounded answer [S1].',cancel(){},dispose(){}};
+(async()=>{const p=new ProjectListening({workspaceState:{get:(k,f)=>values.get(k)||f,update:async(k,v)=>values.set(k,v)}},reader,{}, {load:async()=>({markdown:'# Document\nBody text.'})},explorer,assistant);
+await p.action('queueProject');assert.strictEqual(p.state.queue.length,2);
+await p.onPosition(current,true,true);assert(p.state.progress[current.uri].completed);
+assert(await p.onFinished(current));assert.strictEqual(opens[0].uri,'file:///b.md');
+await p.onOpen({uri:'file:///a.md',line:5},current);await p.action('backDocument');assert.strictEqual(opens.slice(-1)[0].uri,'file:///a.md');assert.strictEqual(opens.slice(-1)[0].line,5);
+await p.action('focus',{value:true});await p.action('language',{value:'auto'});assert(p.state.focus);assert.strictEqual(p.state.languageMode,'auto');
+await p.action('pronunciation',{text:JSON.stringify([{term:'GPIO',say:'G P I O',language:'any'}])});assert.strictEqual(p.state.pronunciations.length,1);await assert.rejects(p.action('pronunciation',{text:'{}'}),/JSON array/);
+await p.action('ai',{task:'question',question:'What is required?'});assert(results.some(x=>x.kind==='ai'&&x.sources.length&&x.text.includes('grounded')));
+await p.action('aiSource',{id:'S1'});assert(opens.length>=3);assert(updates.length);p.dispose();
+console.log('Project workflow: automatic queue transition, cross-document return, settings, pronunciation validation and sourced AI actions passed');
+})().catch(e=>{console.error(e);process.exitCode=1;});

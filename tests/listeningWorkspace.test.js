@@ -1,0 +1,17 @@
+const assert=require('assert');const{ListeningWorkspace,pronounce,languageOf,retrieve,structures,chapterPassages,projectTour}=require('../out/listeningWorkspace');
+const values=new Map(),store={get:(k,f)=>values.get(k)||f,update:async(k,v)=>{values.set(k,v);}};
+(async()=>{const state=new ListeningWorkspace(store);
+await state.add([{uri:'file:///a.md',title:'A'},{uri:'file:///b.md',title:'B'},{uri:'file:///a.md',title:'A duplicate'}]);assert.strictEqual(state.queue.length,2);
+const a=state.queue[0].id;await state.move(a,1);assert.strictEqual(state.queue[state.cursor].id,a);await state.remove(a);assert.strictEqual(state.queue.length,1);
+await state.record({uri:'file:///b.md',title:'B',index:2,total:8,line:5,bookmarks:[]},true);await state.record({uri:'file:///b.md',title:'B',index:2,total:8,line:5,bookmarks:[]},true,true);assert.deepStrictEqual(state.progress['file:///b.md'].visited,[2]);
+await state.correct('file:///b.md','original','# Corrected');assert.strictEqual(state.source('file:///b.md','original'),'# Corrected');assert.strictEqual(state.source('file:///b.md','changed'),'changed');
+const restored=new ListeningWorkspace(store);assert(restored.progress['file:///b.md'].completed);assert.strictEqual(restored.queue.length,1);
+assert.strictEqual(languageOf('A feszültség értéke megfelelő, és a jel működik.'),'hu');assert.strictEqual(languageOf('Connect the board and read the GPIO signal.'),'en');
+assert.strictEqual(pronounce('GPIO and GPIO2; C++', [{term:'GPIO',say:'G P I O',language:'en'},{term:'C++',say:'C plus plus',language:'any'}],'en'),'G P I O and GPIO2; C plus plus');
+assert.strictEqual(pronounce('GPIO', [{term:'GPIO',say:'default',language:'any'},{term:'GPIO',say:'gé pé í ó',language:'hu'}],'hu'),'gé pé í ó');
+const docs=[{uri:'file:///can.md',title:'CAN bus',text:'# CAN\nCAN termination uses 120 ohm resistors.'},{uri:'file:///readme.md',title:'README',text:'Project overview.'},{uri:'file:///setup.md',title:'Setup',text:'Install toolchain.'}];
+const hits=retrieve(docs,'CAN termination');assert.strictEqual(hits[0].uri,'file:///can.md');assert.strictEqual(hits[0].id,'S1');assert.strictEqual(projectTour(docs)[0].title,'README');assert.strictEqual(projectTour(docs,'CAN')[0].title,'CAN bus');
+const nav=structures('# Page 1\n\n| A | B |\n|---|---|\n|1|2|\n\n![Wiring](w.png)\n\n## References');assert(nav.some(x=>x.kind==='page'));assert(nav.some(x=>x.kind==='table'));assert(nav.some(x=>x.kind==='figure'));assert(nav.some(x=>x.kind==='references'));
+const chapter=chapterPassages({uri:'file:///x',title:'X',text:'# One\nFirst.\n## Child\nSecond.\n# Two\nExcluded.'},1);assert(chapter.map(p=>p.text).join('').includes('Second.'));assert(!chapter.map(p=>p.text).join('').includes('Excluded.'));assert.throws(()=>chapterPassages({uri:'x',title:'X',text:'# Long\n'+('line text '.repeat(250)+'\n').repeat(20)},1,2),/limit/);
+console.log('Workspace: queue order/deduplication, resume/progress, correction invalidation, language, pronunciation, source retrieval, tours and structural navigation passed');
+})().catch(e=>{console.error(e);process.exitCode=1;});

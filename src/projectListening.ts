@@ -1,0 +1,68 @@
+import * as vscode from 'vscode';import * as path from 'path';
+import {PiperReader,ReaderSnapshot} from './piperReader';import {DocumentLoader} from './documentLoader';import {DocumentationExplorer} from './documentationExplorer';import {ReaderVoices} from './voiceManager';import {SpeechEngine} from './speechEngine';
+import {ListeningWorkspace,SourceDocument,SourcePassage,chapterPassages,projectTour,retrieve,Pronunciation} from './listeningWorkspace';import {LocalAssistant} from './localAssistant';import {documentExtensions,documentGlob} from './documentFormats';
+export class ProjectListening {
+ readonly state:ListeningWorkspace;private lastAnswer='';private lastSources:SourcePassage[]=[];private opened?:ReaderSnapshot;private returning=false;
+ private decoration?:vscode.TextEditorDecorationType;private sourceEditor?:vscode.TextEditor;private disposed=false;private aiRevision=0;
+ constructor(private context:vscode.ExtensionContext,private reader:PiperReader,private voices:ReaderVoices,private loader:DocumentLoader,private explorer:DocumentationExplorer,private assistant:LocalAssistant){this.state=new ListeningWorkspace(context.workspaceState);explorer.sourceTransform=(uri,text)=>this.state.source(uri,text);}
+ async onOpen(previous:ReaderSnapshot|undefined,current:ReaderSnapshot){if(previous&&(previous.uri!==current.uri||previous.fingerprint!==current.fingerprint)){this.aiRevision++;this.assistant.cancel();this.lastAnswer='';this.lastSources=[];}if(previous&&previous.uri!==current.uri&&!this.returning){this.state.history.push({uri:previous.uri,line:previous.line});this.state.history=this.state.history.slice(-30);}this.opened=current;this.returning=false;this.clearHighlight();await this.state.save();this.update();}
+ async onPosition(current:ReaderSnapshot,heard=false,completed=false){if(this.disposed)return;this.opened=current;await this.state.record({fingerprint:current.fingerprint,uri:current.uri,title:current.title,index:current.index,total:current.total,line:current.line,bookmarks:current.bookmarks},heard,completed);this.explorer.updateListening(this.state.progress,current);this.reader.updateProject({progress:this.state.progress[current.uri]});}
+ async onFinished(current:ReaderSnapshot){if(this.state.autoAdvance&&this.state.queue[this.state.cursor]?.uri===current.uri&&this.state.cursor+1<this.state.queue.length){this.state.cursor++;await this.state.save();await this.openQueue();return true;}if(this.state.autoAdvance&&this.state.queue[this.state.cursor]?.uri===current.uri){this.state.cursor=this.state.queue.length;await this.state.save();}this.update();return false;}
+ private documents():SourceDocument[]{return this.explorer.documents().map(d=>({...d,text:this.state.source(d.uri,d.text)}));}
+ private update(){const current=this.reader.snapshot();this.reader.updateProject({queue:this.state.queue.map((q,i)=>({...q,active:i===this.state.cursor&&q.uri===current?.uri,progress:this.state.progress[q.uri]})),autoAdvance:this.state.autoAdvance,languageMode:this.state.languageMode,focus:this.state.focus,syncHighlight:this.state.syncHighlight,pronunciations:JSON.stringify(this.state.pronunciations,null,2),currentUri:current?.uri,rawText:current&&current.text.length<=200000?current.text:'',historyCount:this.state.history.length,progress:current?this.state.progress[current.uri]:undefined});this.explorer.updateListening(this.state.progress,current);}
+ private async open(uri:string,line?:number){const imported=await this.loader.load(vscode.Uri.parse(uri));await this.reader.open(imported.markdown,path.basename(vscode.Uri.parse(uri).path),uri,true,line);this.update();}
+ private async openQueue(){const item=this.state.queue[this.state.cursor];if(!item)throw Error('The listening queue is empty. Add documents first.');await this.open(item.uri,item.line>0?item.line:this.state.progress[item.uri]?.completed?0:undefined);}
+ async highlight(current:ReaderSnapshot){if(!this.state.syncHighlight)return;const visible=vscode.window.visibleTextEditors||[];const extracted=visible.find(e=>e.document.uri.scheme==='markdown-listening'&&decodeURIComponent(e.document.uri.path).includes(current.uri));const editor=extracted||(!this.state.corrections[current.uri]&&/\.(md|markdown|mdown|txt|text)$/i.test(current.uri)?visible.find(e=>e.document.uri.toString()===current.uri):undefined);if(!editor)return;
+  if(this.sourceEditor&&this.sourceEditor!==editor)this.sourceEditor.setDecorations(this.decoration!,[]);
+  if(!this.decoration)this.decoration=vscode.window.createTextEditorDecorationType({isWholeLine:true,backgroundColor:new vscode.ThemeColor('editor.findMatchHighlightBackground'),overviewRulerColor:new vscode.ThemeColor('editor.findMatchHighlightBackground')});
+  this.sourceEditor=editor;const line=Math.min(current.line,editor.document.lineCount-1),range=editor.document.lineAt(line).range;editor.setDecorations(this.decoration,[range]);editor.revealRange(range,vscode.TextEditorRevealType.InCenterIfOutsideViewport);
+ }
+ private clearHighlight(){if(this.sourceEditor&&this.decoration)this.sourceEditor.setDecorations(this.decoration,[]);this.sourceEditor=undefined;}
+ async action(action:string,message:any={}){
+  if(action!=='cancelAI'&&!vscode.workspace.isTrusted)throw Error('Trust this workspace before using the listening workspace.');
+  switch(action){
+   case 'ready':this.update();return;
+   case 'queueAdd':{const files=await vscode.window.showOpenDialog({canSelectMany:true,filters:{Documents:documentExtensions}});if(files)await this.state.add(files.map(uri=>({uri:uri.toString(),title:path.basename(uri.path)})));break;}
+   case 'queueFolder':{const folder=(await vscode.window.showOpenDialog({canSelectFolders:true,canSelectFiles:false,canSelectMany:false}))?.[0];if(folder){const files=await vscode.workspace.findFiles(new vscode.RelativePattern(folder,documentGlob),'**/{node_modules,.git,dist,out,.venv}/**',1000);await this.state.add(files.map(uri=>({uri:uri.toString(),title:vscode.workspace.asRelativePath(uri,true)})));}break;}
+   case 'queueProject':await this.explorer.refresh();await this.state.add(this.documents());break;
+   case 'tour':{await this.explorer.refresh();const topic=typeof message.topic==='string'?message.topic:await vscode.window.showInputBox({prompt:'Tour topic (leave empty for README → architecture → setup → examples)',placeHolder:'CAN subsystem, meshing, project overview…'});if(topic===undefined)return;const docs=projectTour(this.documents(),topic);if(!docs.length)throw Error('No documents match this tour topic.');this.state.queue=[];this.state.cursor=0;await this.state.add(docs);this.reader.projectResult('tour','Built a new tour queue with '+docs.length+' documents in suggested learning order.');break;}
+   case 'queueStart':if(this.state.cursor>=this.state.queue.length)this.state.cursor=0;await this.openQueue();break;
+   case 'queuePlay':{const i=this.state.queue.findIndex(q=>q.id===message.id);if(i<0)return;this.state.cursor=i;await this.openQueue();break;}
+   case 'queueUp':await this.state.move(message.id,-1);break;
+   case 'queueDown':await this.state.move(message.id,1);break;
+   case 'queueRemove':await this.state.remove(message.id);break;
+   case 'queueClear':this.state.queue=[];this.state.cursor=0;break;
+   case 'queueNext':if(this.state.cursor+1<this.state.queue.length){this.state.cursor++;await this.openQueue();}break;
+   case 'backDocument':{const item=this.state.history.pop();if(item){this.returning=true;await this.open(item.uri,item.line);}break;}
+   case 'focus':this.state.focus=!!message.value;break;
+   case 'syncHighlight':this.state.syncHighlight=!!message.value;if(!this.state.syncHighlight)this.clearHighlight();break;
+   case 'autoAdvance':this.state.autoAdvance=!!message.value;break;
+   case 'language':if(['manual','en','hu','auto'].includes(message.value)){this.state.languageMode=message.value;await this.reader.control('stop');}break;
+   case 'pronunciation':{const rules=JSON.parse(String(message.text));if(!Array.isArray(rules)||rules.length>1000||rules.some(r=>!r||typeof r.term!=='string'||typeof r.say!=='string'||r.term.length>100||r.say.length>300||!['any','en','hu'].includes(r.language)))throw Error('Use a JSON array of {term, say, language: any/en/hu}; maximum 1,000 rules.');this.state.pronunciations=rules;await this.reader.control('stop');this.reader.projectResult('pronunciation','Pronunciation rules saved. Press Read to hear the changes.');break;}
+   case 'correctSource':{const current=this.reader.snapshot();if(!current)return;await this.state.correct(current.uri,this.reader.rawSource(),String(message.text));await this.reader.open(this.reader.rawSource(),current.title,current.uri,false,current.line);await this.explorer.refresh();this.reader.projectResult('corrections','Corrected extraction saved for this workspace; original file unchanged.');break;}
+   case 'resetSource':{const current=this.reader.snapshot();if(!current)return;delete this.state.corrections[current.uri];await this.reader.open(this.reader.rawSource(),current.title,current.uri,false,current.line);await this.explorer.refresh();break;}
+   case 'showSource':{const current=this.reader.snapshot();if(current){const uri=vscode.Uri.parse(current.uri),imported=await this.loader.load(uri);const text=this.state.source(current.uri,imported.markdown);await this.loader.show(uri,text!==imported.markdown?{...imported,markdown:text,extracted:true}:imported,current.line);await this.highlight(current);}return;}
+   case 'structure':if(Number.isInteger(message.line)&&message.line>=0)await this.reader.jumpToLine(message.line);break;
+   case 'diagnostics':await this.diagnostics();break;
+   case 'testAudio':await this.reader.speakInformation('Piper is speaking. If you hear this sentence, the audio output is working.');break;
+   case 'testAI':{const answer=await this.assistant.generate('question','What color is the diagnostic indicator?',[{id:'S1',uri:'diagnostic:',title:'Local diagnostic',line:0,text:'The diagnostic indicator is green.',score:1}]);this.reader.projectResult('diagnostics','Real model response: '+answer);break;}
+   case 'ai':{const current=this.reader.snapshot();if(!current)throw Error('Open a document before asking the assistant.');const query=String(message.question||'Summarize the current section.').slice(0,1000),task=['summary','explain','dependencies','question'].includes(message.task)?message.task:'question';const revision=++this.aiRevision;this.lastAnswer='';
+    if(task==='summary'){const sources=chapterPassages({uri:current.uri,title:current.title,text:current.text},current.line);this.lastSources=sources;const parts:string[]=[];try{for(let i=0;i<sources.length;i++){if(revision!==this.aiRevision)return;this.reader.projectResult('ai','Summarizing complete section: part '+(i+1)+' of '+sources.length+'…',sources);const answer=await this.assistant.generate('summary',query+' Summarize this part in two short bullet points.',[sources[i]]);if(revision!==this.aiRevision)return;parts.push('['+sources[i].id+'] '+answer);}this.lastAnswer=parts.join('\n\n');if(revision===this.aiRevision)this.reader.projectResult('ai',this.lastAnswer,sources);}catch(error){if(String(error).includes('cancelled'))return;throw error;}break;}
+    const docs=this.documents();const currentPassage=current.text.split('\n').slice(Math.max(0,current.line-2),current.line+35).join('\n').slice(0,1800);
+    const sources:SourcePassage[]=[{id:'S1',uri:current.uri,title:current.title,line:Math.max(0,current.line-2),text:currentPassage,score:100},...retrieve(docs,query+' '+currentPassage.slice(0,120),3).filter(p=>!(p.uri===current.uri&&Math.abs(p.line-current.line)<10)).map((p,i)=>({...p,id:'S'+(i+2)}))];this.lastSources=sources;this.reader.projectResult('ai','Running the bundled local model on CPU…',sources);
+    try{this.lastAnswer=await this.assistant.generate(task,query,sources);if(revision===this.aiRevision)this.reader.projectResult('ai',this.lastAnswer,sources);}catch(error){if(String(error).includes('cancelled'))return;throw error;}break;}
+   case 'cancelAI':this.aiRevision++;this.assistant.cancel();this.reader.projectResult('ai','Local AI cancelled.');return;
+   case 'listenAI':if(this.lastAnswer)await this.reader.speakInformation('Generated explanation. Check the source passages. '+this.lastAnswer);return;
+   case 'aiSource':{const source=this.lastSources.find(s=>s.id===message.id);if(source)await this.open(source.uri,source.line);break;}
+   default:return;
+  }
+  await this.state.save();this.update();
+ }
+ private async diagnostics(){
+  const lines=['Platform: '+process.platform+'-'+process.arch,'Workspace trust: '+vscode.workspace.isTrusted,'Document: '+(this.reader.snapshot()?.title||'none')];
+  try{const list=await this.voices.list();lines.push('Installed voices: '+list.filter(v=>v.installed).length);const resolved=await this.voices.resolve();lines.push('Piper: '+resolved.runtime.executable);const engine=new SpeechEngine(resolved.runtime,resolved.model);try{const audio=await engine.render('Offline synthesis diagnostic.');lines.push('Synthesis: valid WAV generated ('+audio.length+' bytes). Use Test speaker to verify output.');}finally{engine.dispose();}}catch(error){lines.push('Piper error: '+String(error)+' — try bundled executable setting auto; reinstall the full offline VSIX if assets are missing.');}
+  try{const assets=await this.assistant.verify();lines.push('Local AI: '+assets.manifest.model.name+'; checksum verified. Test model runs a real inference.');}catch(error){lines.push('Local AI error: '+String(error));}
+  this.reader.projectResult('diagnostics',lines.join('\n'));
+ }
+ dispose(){this.disposed=true;this.assistant.dispose();this.clearHighlight();this.decoration?.dispose();void this.state.save();}
+}

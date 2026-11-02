@@ -1,0 +1,12 @@
+const assert = require('assert');
+const { speechChunks } = require('../out/speechText');
+assert.deepStrictEqual(speechChunks('---\ntitle: Hidden\n---\n# Hello\n\nRead **this** [guide](https://example.com).'), ['Hello', 'Read this guide.']);
+assert.deepStrictEqual(speechChunks('Before\n\n```js\nsecret()\n```\n\nAfter'), ['Before', 'After']);
+assert.deepStrictEqual(speechChunks('~~~py\nprint(1)\n~~~', true), ['print(1)']);
+assert.deepStrictEqual(speechChunks('<!-- private\nnote -->\n![Diagram](x.png)\n\n- [x] Done'), ['Diagram', 'Done']);
+assert.deepStrictEqual(speechChunks('  \n\n'), []);
+const chunks = speechChunks('word '.repeat(1000) + 'x'.repeat(1800));
+assert(chunks.every(x => x.length <= 800));
+assert(chunks.length > 5);
+assert.deepStrictEqual(speechChunks('```\nhidden\n~~~\nstill hidden'), []);
+console.log('Speech extraction: 7 cases passed');

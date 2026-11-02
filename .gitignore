@@ -2,3 +2,11 @@ dist
 node_modules
 *.vsix
 *.log
+
+out/
+
+resources/voices/**/*.onnx
+**/__pycache__/
+*.partial
+
+resources/runtime/

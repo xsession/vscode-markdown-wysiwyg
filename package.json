@@ -1,111 +1,474 @@
 {
-	"name": "markdown-wysiwyg",
-	"displayName": "Markdown Editor",
-	"description": "A powerful markdown WYSIWYG editor",
-	"version": "0.7.7",
-	"publisher": "adamerose",
-	"private": true,
-	"license": "GPLv3",
-	"repository": {
-		"type": "git",
-		"url": "https://github.com/adamerose/vscode-markdown-wysiwyg"
-	},
-	"engines": {
-		"vscode": "^1.32.0"
-	},
-	"categories": [
-		"Programming Languages",
-		"Formatters"
-	],
-	"tags": [
-		"markdown",
-		"editor",
-		"wysiwyg",
-		"ckeditor"
-	],
-	"activationEvents": [
-		"onCustomEditor:markdownEditor.customEditor",
-		"onCommand:markdownEditor.openCustomEditor"
-	],
-	"main": "./dist/extension",
-	"contributes": {
-		"customEditors": [
-			{
-				"viewType": "markdownEditor.customEditor",
-				"displayName": "Markdown WYSIWYG Editor",
-				"selector": [
-					{
-						"filenamePattern": "*.md"
-					}
-				],
-				"priority": "default"
-			}
-		],
-		"commands": [
-			{
-				"command": "markdownEditor.openCustomEditor",
-				"title": "Open WYSIWYG Editor",
-				"icon": "$(preview)"
-			},
-			{
-				"command": "markdownEditor.openDefaultEditor",
-				"title": "Open Default Editor",
-				"icon": "$(note)"
-			}
-		],
-		"menus": {
-			"editor/title": [
-				{
-					"command": "markdownEditor.openCustomEditor",
-					"group": "navigation@-1",
-					"when": "resourceLangId == markdown && !markdownEditor.editorIsActive"
-				},
-				{
-					"command": "markdownEditor.openDefaultEditor",
-					"group": "navigation@-1",
-					"when": "resourceLangId == markdown && markdownEditor.editorIsActive"
-				},
-				{
-					"command": "markdown.showPreviewToSide",
-					"group": "navigation@1",
-					"when": "resourceLangId == markdown && markdownEditor.editorIsActive"
-				}
-			]
-		},
-		"keybindings": [
-			{
-				"command": "markdownEditor.openCustomEditor",
-				"key": "ctrl+shift+e",
-				"mac": "cmd+shift+e",
-				"when": "resourceLangId == markdown && !markdownEditor.editorIsActive"
-			},
-			{
-				"command": "markdownEditor.openDefaultEditor",
-				"key": "ctrl+shift+e",
-				"mac": "cmd+shift+e",
-				"when": "resourceLangId == markdown && markdownEditor.editorIsActive"
-			}
-		]
-	},
-	"scripts": {
-		"vscode:prepublish": "webpack --mode production",
-		"webpack": "webpack --mode development",
-		"webpack-dev": "webpack --mode development --watch",
-		"test-compile": "tsc -p ./",
-		"lint": "eslint . --ext .ts,.tsx"
-	},
-	"devDependencies": {
-		"@types/node": "^12.12.0",
-		"@types/vscode": "^1.32.0",
-		"@typescript-eslint/eslint-plugin": "^4.16.0",
-		"@typescript-eslint/parser": "^4.16.0",
-		"eslint": "^7.21.0",
-		"ts-loader": "^7.0.5",
-		"typescript": "^4.4.3",
-		"webpack": "^5.75.0",
-		"webpack-cli": "^5.0.1"
-	},
-	"dependencies": {
-		"prettier": "^2.8.1"
-	}
+  "name": "markdown-wysiwyg",
+  "displayName": "Markdown Editor",
+  "description": "Offline project documentation listening workspace, mind map, Piper voices and local AI",
+  "version": "0.13.1",
+  "publisher": "adamerose",
+  "private": true,
+  "license": "GPLv3",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/xsession/vscode-markdown-wysiwyg"
+  },
+  "engines": {
+    "vscode": "^1.105.0"
+  },
+  "categories": [
+    "Programming Languages",
+    "Formatters"
+  ],
+  "tags": [
+    "markdown",
+    "editor",
+    "wysiwyg",
+    "ckeditor"
+  ],
+  "activationEvents": [
+    "onCustomEditor:markdownEditor.customEditor",
+    "onCommand:markdownEditor.openCustomEditor",
+    "onCommand:markdownEditor.readAloud",
+    "onCommand:markdownEditor.readSelection",
+    "onCommand:markdownEditor.listeningGuide",
+    "onCommand:markdownEditor.documentation.refresh",
+    "onCommand:markdownEditor.documentation.mindmap",
+    "onCommand:markdownEditor.documentation.open",
+    "onCommand:markdownEditor.documentation.listen",
+    "onView:markdownEditor.documentation",
+    "onCommand:markdownEditor.readDocument",
+    "onView:markdownEditor.documentationHub",
+    "onCommand:markdownEditor.workspace.diagnostics",
+    "onCommand:markdownEditor.workspace.queue",
+    "onCommand:markdownEditor.workspace.tour",
+    "onCommand:markdownEditor.listen.play",
+    "onCommand:markdownEditor.listen.pause",
+    "onCommand:markdownEditor.listen.stop",
+    "onCommand:markdownEditor.listen.next",
+    "onCommand:markdownEditor.listen.previous",
+    "onCommand:markdownEditor.listen.nextHeading",
+    "onCommand:markdownEditor.listen.previousHeading",
+    "onCommand:markdownEditor.listen.context",
+    "onCommand:markdownEditor.listen.back",
+    "onCommand:markdownEditor.listen.bookmark"
+  ],
+  "main": "./dist/extension",
+  "contributes": {
+    "customEditors": [
+      {
+        "viewType": "markdownEditor.customEditor",
+        "displayName": "Markdown WYSIWYG Editor",
+        "selector": [
+          {
+            "filenamePattern": "*.md"
+          }
+        ],
+        "priority": "default"
+      }
+    ],
+    "commands": [
+      {
+        "command": "markdownEditor.openCustomEditor",
+        "title": "Open WYSIWYG Editor",
+        "icon": "$(preview)"
+      },
+      {
+        "command": "markdownEditor.openDefaultEditor",
+        "title": "Open Default Editor",
+        "icon": "$(note)"
+      },
+      {
+        "command": "markdownEditor.readAloud",
+        "title": "Read document aloud (Piper)",
+        "icon": "$(unmute)"
+      },
+      {
+        "command": "markdownEditor.readSelection",
+        "title": "Read Markdown Selection (Piper)",
+        "icon": "$(unmute)"
+      },
+      {
+        "command": "markdownEditor.listeningGuide",
+        "title": "Listen to the Long-Document Reading Guide (Piper)"
+      },
+      {
+        "command": "markdownEditor.documentation.refresh",
+        "title": "Refresh documentation index",
+        "category": "Markdown Editor",
+        "icon": "$(refresh)"
+      },
+      {
+        "command": "markdownEditor.documentation.mindmap",
+        "title": "Open documentation mind map",
+        "category": "Markdown Editor",
+        "icon": {
+          "light": "media/mindmap-light.svg",
+          "dark": "media/mindmap-dark.svg"
+        }
+      },
+      {
+        "command": "markdownEditor.documentation.open",
+        "title": "Open documentation section",
+        "category": "Markdown Editor",
+        "icon": "$(go-to-file)"
+      },
+      {
+        "command": "markdownEditor.documentation.listen",
+        "title": "Listen from documentation section",
+        "category": "Markdown Editor",
+        "icon": "$(play)"
+      },
+      {
+        "command": "markdownEditor.readDocument",
+        "title": "Open and listen to document (10 formats)",
+        "category": "Markdown Editor",
+        "icon": "$(unmute)"
+      },
+      {
+        "command": "markdownEditor.workspace.diagnostics",
+        "title": "Run offline listening diagnostics",
+        "category": "Markdown Editor",
+        "icon": "$(tools)"
+      },
+      {
+        "command": "markdownEditor.workspace.queue",
+        "title": "Add project to listening queue",
+        "category": "Markdown Editor",
+        "icon": "$(list-ordered)"
+      },
+      {
+        "command": "markdownEditor.workspace.tour",
+        "title": "Build guided project listening tour",
+        "category": "Markdown Editor",
+        "icon": "$(compass)"
+      },
+      {
+        "command": "markdownEditor.listen.play",
+        "title": "Listening: play",
+        "category": "Markdown Editor"
+      },
+      {
+        "command": "markdownEditor.listen.pause",
+        "title": "Listening: pause",
+        "category": "Markdown Editor"
+      },
+      {
+        "command": "markdownEditor.listen.stop",
+        "title": "Listening: stop",
+        "category": "Markdown Editor"
+      },
+      {
+        "command": "markdownEditor.listen.next",
+        "title": "Listening: next",
+        "category": "Markdown Editor"
+      },
+      {
+        "command": "markdownEditor.listen.previous",
+        "title": "Listening: previous",
+        "category": "Markdown Editor"
+      },
+      {
+        "command": "markdownEditor.listen.nextHeading",
+        "title": "Listening: nextHeading",
+        "category": "Markdown Editor"
+      },
+      {
+        "command": "markdownEditor.listen.previousHeading",
+        "title": "Listening: previousHeading",
+        "category": "Markdown Editor"
+      },
+      {
+        "command": "markdownEditor.listen.context",
+        "title": "Listening: context",
+        "category": "Markdown Editor"
+      },
+      {
+        "command": "markdownEditor.listen.back",
+        "title": "Listening: back",
+        "category": "Markdown Editor"
+      },
+      {
+        "command": "markdownEditor.listen.bookmark",
+        "title": "Listening: bookmark",
+        "category": "Markdown Editor"
+      }
+    ],
+    "menus": {
+      "editor/title": [
+        {
+          "command": "markdownEditor.openCustomEditor",
+          "group": "navigation@-1",
+          "when": "resourceLangId == markdown && !markdownEditor.editorIsActive"
+        },
+        {
+          "command": "markdownEditor.openDefaultEditor",
+          "group": "navigation@-1",
+          "when": "resourceLangId == markdown && markdownEditor.editorIsActive"
+        },
+        {
+          "command": "markdown.showPreviewToSide",
+          "group": "navigation@1",
+          "when": "resourceLangId == markdown && markdownEditor.editorIsActive"
+        },
+        {
+          "command": "markdownEditor.readAloud",
+          "group": "navigation@2",
+          "when": "resourceLangId == markdown"
+        },
+        {
+          "command": "markdownEditor.documentation.mindmap",
+          "group": "navigation@3"
+        },
+        {
+          "command": "markdownEditor.readDocument",
+          "group": "navigation@4",
+          "when": "resourceExtname =~ /\\.(md|markdown|mdown|txt|text|html|htm|xhtml|pdf|docx|odt|epub|rtf|rst|rest|adoc|asciidoc)$/i"
+        }
+      ],
+      "editor/context": [
+        {
+          "command": "markdownEditor.readSelection",
+          "when": "editorLangId == markdown && editorHasSelection",
+          "group": "navigation"
+        }
+      ],
+      "view/title": [
+        {
+          "command": "markdownEditor.documentation.refresh",
+          "when": "(view == markdownEditor.documentation || view == markdownEditor.documentationHub)",
+          "group": "navigation"
+        },
+        {
+          "command": "markdownEditor.documentation.mindmap",
+          "when": "(view == markdownEditor.documentation || view == markdownEditor.documentationHub)",
+          "group": "navigation"
+        },
+        {
+          "command": "markdownEditor.workspace.queue",
+          "when": "view == markdownEditor.documentationHub",
+          "group": "navigation@3"
+        }
+      ],
+      "view/item/context": [
+        {
+          "command": "markdownEditor.documentation.listen",
+          "when": "(view == markdownEditor.documentation || view == markdownEditor.documentationHub) && viewItem == documentationSection",
+          "group": "inline"
+        }
+      ],
+      "explorer/context": [
+        {
+          "command": "markdownEditor.readDocument",
+          "group": "navigation",
+          "when": "resourceExtname =~ /\\.(md|markdown|mdown|txt|text|html|htm|xhtml|pdf|docx|odt|epub|rtf|rst|rest|adoc|asciidoc)$/i"
+        }
+      ]
+    },
+    "keybindings": [
+      {
+        "command": "markdownEditor.openCustomEditor",
+        "key": "ctrl+shift+e",
+        "mac": "cmd+shift+e",
+        "when": "resourceLangId == markdown && !markdownEditor.editorIsActive"
+      },
+      {
+        "command": "markdownEditor.openDefaultEditor",
+        "key": "ctrl+shift+e",
+        "mac": "cmd+shift+e",
+        "when": "resourceLangId == markdown && markdownEditor.editorIsActive"
+      },
+      {
+        "command": "markdownEditor.readAloud",
+        "key": "ctrl+alt+shift+r",
+        "mac": "cmd+alt+shift+r",
+        "when": "resourceLangId == markdown"
+      },
+      {
+        "command": "markdownEditor.listen.play",
+        "key": "ctrl+alt+shift+p",
+        "when": "markdownEditor.listenerActive"
+      },
+      {
+        "command": "markdownEditor.listen.pause",
+        "key": "ctrl+alt+space",
+        "when": "markdownEditor.listenerActive"
+      },
+      {
+        "command": "markdownEditor.listen.stop",
+        "key": "ctrl+alt+shift+s",
+        "when": "markdownEditor.listenerActive"
+      },
+      {
+        "command": "markdownEditor.listen.next",
+        "key": "ctrl+alt+right",
+        "when": "markdownEditor.listenerActive"
+      },
+      {
+        "command": "markdownEditor.listen.previous",
+        "key": "ctrl+alt+left",
+        "when": "markdownEditor.listenerActive"
+      },
+      {
+        "command": "markdownEditor.listen.nextHeading",
+        "key": "ctrl+alt+shift+down",
+        "when": "markdownEditor.listenerActive"
+      },
+      {
+        "command": "markdownEditor.listen.previousHeading",
+        "key": "ctrl+alt+shift+up",
+        "when": "markdownEditor.listenerActive"
+      },
+      {
+        "command": "markdownEditor.listen.context",
+        "key": "ctrl+alt+shift+l",
+        "when": "markdownEditor.listenerActive"
+      },
+      {
+        "command": "markdownEditor.listen.back",
+        "key": "ctrl+alt+shift+backspace",
+        "when": "markdownEditor.listenerActive"
+      },
+      {
+        "command": "markdownEditor.listen.bookmark",
+        "key": "ctrl+alt+shift+b",
+        "when": "markdownEditor.listenerActive"
+      }
+    ],
+    "configuration": {
+      "title": "Markdown Editor Piper",
+      "properties": {
+        "markdownEditor.piper.executable": {
+          "type": "string",
+          "default": "auto",
+          "scope": "machine",
+          "description": "auto uses the included offline native engine on Windows x64 / Linux x64, or set a custom executable."
+        },
+        "markdownEditor.piper.arguments": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          },
+          "default": [],
+          "scope": "machine",
+          "description": "Arguments before Piper options. For Python use [\"-m\", \"piper\"]."
+        },
+        "markdownEditor.piper.modelPath": {
+          "type": "string",
+          "default": "",
+          "scope": "machine",
+          "description": "Absolute path to voice.onnx; voice.onnx.json must be beside it."
+        },
+        "markdownEditor.piper.readCodeBlocks": {
+          "type": "boolean",
+          "default": false,
+          "description": "Include fenced code blocks in spoken text.",
+          "deprecationMessage": "Use markdownEditor.piper.skipCode and the reader Skip options instead."
+        },
+        "markdownEditor.documentation.exclude": {
+          "type": "string",
+          "default": "**/{node_modules,.git,dist,out,build,.venv,vendor}/**",
+          "description": "Glob excluded from documentation indexing."
+        },
+        "markdownEditor.documentation.maxFiles": {
+          "type": "number",
+          "default": 2000,
+          "minimum": 1,
+          "maximum": 10000,
+          "description": "Maximum supported documents indexed per workspace."
+        },
+        "markdownEditor.documentation.maxFileBytes": {
+          "type": "number",
+          "default": 33554432,
+          "minimum": 1024,
+          "description": "Maximum size per supported document when indexing (default 32 MiB)."
+        },
+        "markdownEditor.piper.skipCode": {
+          "type": "boolean",
+          "default": true,
+          "description": "Skip code sections and inline code. Reader checkboxes remember workspace overrides."
+        },
+        "markdownEditor.piper.skipUrls": {
+          "type": "boolean",
+          "default": true,
+          "description": "Skip URL addresses while retaining descriptive link text. Reader checkboxes remember workspace overrides."
+        },
+        "markdownEditor.piper.skipHeaders": {
+          "type": "boolean",
+          "default": true,
+          "description": "Skip detected running page headers, not section headings. Reader checkboxes remember workspace overrides."
+        },
+        "markdownEditor.piper.skipFooters": {
+          "type": "boolean",
+          "default": true,
+          "description": "Skip detected running page footers. Reader checkboxes remember workspace overrides."
+        }
+      }
+    },
+    "views": {
+      "explorer": [
+        {
+          "id": "markdownEditor.documentation",
+          "name": "Documentation contents"
+        }
+      ],
+      "markdownDocumentation": [
+        {
+          "id": "markdownEditor.documentationHub",
+          "name": "Documentation contents"
+        }
+      ]
+    },
+    "viewsContainers": {
+      "activitybar": [
+        {
+          "id": "markdownDocumentation",
+          "title": "Documentation and mind map",
+          "icon": "media/documentation.svg"
+        }
+      ]
+    }
+  },
+  "scripts": {
+    "vscode:prepublish": "node scripts/clean-package-fragments.js && node scripts/prepare-document-package.js && node scripts/verify-voices.js && node scripts/verify-runtime.js && node scripts/verify-ai.js && node scripts/verify-document-parsers.js && webpack --mode production --no-optimization-minimize",
+    "webpack": "webpack --mode development",
+    "webpack-dev": "webpack --mode development --watch",
+    "test-compile": "tsc -p ./",
+    "lint": "eslint . --ext .ts,.tsx",
+    "test": "npm run test-compile && node tests/speechText.test.js && node tests/listeningDocument.test.js && node tests/speechEngine.test.js && node tests/piperReader.test.js && node tests/voiceManager.test.js && node tests/documentationIndex.test.js && node tests/documentationExplorer.test.js && node tests/documentFormats.test.js && node tests/documentLoader.test.js && node tests/listeningWorkspace.test.js && node tests/projectListening.test.js && node tests/localAssistant.test.js",
+    "voices:bundle": "python scripts/bundle_voices.py",
+    "voices:verify": "node scripts/verify-voices.js",
+    "runtime:verify": "node scripts/verify-runtime.js",
+    "runtime:bundle": "python scripts/bundle_runtime.py",
+    "test:download": "python -m unittest discover -s tests -p '*_test.py'",
+    "test:package": "npm run voices:verify && npm run runtime:verify && npm run ai:verify",
+    "documents:verify": "node scripts/verify-document-parsers.js",
+    "package:prepare": "node scripts/prepare-document-package.js",
+    "ai:bundle": "python scripts/bundle_ai.py",
+    "ai:verify": "node scripts/verify-ai.js"
+  },
+  "devDependencies": {
+    "@types/node": "^12.12.0",
+    "@types/vscode": "^1.32.0",
+    "@typescript-eslint/eslint-plugin": "^4.16.0",
+    "@typescript-eslint/parser": "^4.16.0",
+    "eslint": "^7.21.0",
+    "ts-loader": "^7.0.5",
+    "typescript": "^4.4.3",
+    "webpack": "^5.75.0",
+    "webpack-cli": "^5.0.1"
+  },
+  "dependencies": {
+    "@iarna/rtf-to-html": "1.1.0",
+    "@thednp/dommatrix": "3.1.2",
+    "fflate": "0.8.3",
+    "htmlparser2": "12.0.0",
+    "mammoth": "1.13.0",
+    "pdf-parse": "2.4.5",
+    "prettier": "^2.8.1"
+  },
+  "capabilities": {
+    "untrustedWorkspaces": {
+      "supported": "limited",
+      "description": "Piper execution requires a trusted workspace."
+    },
+    "virtualWorkspaces": false
+  }
 }

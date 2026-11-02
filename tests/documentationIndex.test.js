@@ -1,0 +1,14 @@
+const assert = require('assert');
+const {headings,documentationTree} = require('../out/documentationIndex');
+const text = '---\ntitle: Frontmatter\n---\n# Intro\n## Child\n### Deep\n## Peer\n```md\n# Hidden\n```\n<!--\n# Comment\n-->\nSetext\n======\n#### Skipped level\n# Intro\n';
+const h=headings(text,'file:///docs/a.md');
+assert.deepStrictEqual(h.map(n=>n.label),['Intro','Setext','Intro']);
+assert.strictEqual(h[0].line,3);assert.strictEqual(h[0].children.length,2);assert.strictEqual(h[0].children[0].children[0].label,'Deep');
+assert.strictEqual(h[1].line,13);assert.strictEqual(h[1].children[0].level,4);assert.notStrictEqual(h[0].id,h[2].id);
+assert.strictEqual(headings('~~~~\n# Hidden\n~~~\n# Still hidden\n~~~~\n# Visible','x')[0].label,'Visible');
+assert.strictEqual(headings('# [Link](x) and `code`','x')[0].label,'Link and code');
+const tree=documentationTree([{path:'project/docs/a.md',uri:'file:///a',text},{path:'project/README.md',uri:'file:///b',text:'# Readme'}]);
+assert.strictEqual(tree.children.length,1);assert.strictEqual(tree.children[0].children.length,2);
+assert.strictEqual(headings(Array.from({length:40000},(_,i)=>'# Heading '+i).join('\n'),'large').length,40000);
+assert.deepStrictEqual(documentationTree([]).children,[]);
+console.log('Documentation index: hierarchy, source lines, fences, comments, frontmatter, duplicate headings, folders, empty and 40,000 headings passed');

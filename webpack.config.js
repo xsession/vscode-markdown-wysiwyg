@@ -23,6 +23,13 @@ const config = {
 	},
 	devtool: 'source-map',
 	externals: {
+		'pdf-parse': 'commonjs pdf-parse',
+		'../media/documentParserAssets.cjs': 'commonjs ../media/documentParserAssets.cjs',
+		'@thednp/dommatrix': 'commonjs @thednp/dommatrix',
+		'htmlparser2': 'commonjs htmlparser2',
+		'mammoth': 'commonjs mammoth',
+		'fflate': 'commonjs fflate',
+		'@iarna/rtf-to-html': 'commonjs @iarna/rtf-to-html',
 		vscode: 'commonjs vscode', // the vscode-module is created on-the-fly and must be excluded. Add other modules that cannot be webpack'ed, 📖 -> https://webpack.js.org/configuration/externals/
 	},
 	resolve: {

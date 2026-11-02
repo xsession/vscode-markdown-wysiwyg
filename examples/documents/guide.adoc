@@ -1,0 +1,8 @@
+= Guide
+
+Readable body.
+
+[source,c]
+----
+SECRET_CODE
+----

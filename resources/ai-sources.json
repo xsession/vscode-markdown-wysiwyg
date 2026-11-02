@@ -1,0 +1,26 @@
+{
+  "model": {
+    "name": "Qwen3-0.6B Q4_K_M",
+    "file": "model.gguf",
+    "url": "https://huggingface.co/unsloth/Qwen3-0.6B-GGUF/resolve/50968a4468ef4233ed78cd7c3de230dd1d61a56b/Qwen3-0.6B-Q4_K_M.gguf",
+    "sha256": "ac2d97712095a558e31573f62f466a3f9d93990898b0ec79d7c974c1780d524a",
+    "size": 396705472,
+    "license": "Apache-2.0",
+    "upstream": "https://huggingface.co/Qwen/Qwen3-0.6B"
+  },
+  "release": "b12002",
+  "archives": [
+    {
+      "name": "llama-b12002-bin-ubuntu-x64.tar.gz",
+      "url": "https://github.com/ggml-org/llama.cpp/releases/download/b12002/llama-b12002-bin-ubuntu-x64.tar.gz",
+      "sha256": "9e3d6465cbfa6eac7946e8a9edb88c1a9a35262f7dc6def38293f0b896b71f8b",
+      "platform": "linux-x64"
+    },
+    {
+      "name": "llama-b12002-bin-win-cpu-x64.zip",
+      "url": "https://github.com/ggml-org/llama.cpp/releases/download/b12002/llama-b12002-bin-win-cpu-x64.zip",
+      "sha256": "ef836b6ff72ed347a2c059f95c9880d316f38f9dcb3570d3ffcd5da7afd7ff3a",
+      "platform": "win32-x64"
+    }
+  ]
+}
