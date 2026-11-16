@@ -19,3 +19,4 @@ dist_/
 out_/
 
 .vscode/settings.json
+bundle-test.bundle

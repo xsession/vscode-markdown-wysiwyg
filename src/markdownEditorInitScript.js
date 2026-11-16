@@ -92,6 +92,7 @@ window.addEventListener('message', (event) => {
 
 			// This state is returned in the call to `vscode.getState` below when a webview is reloaded.
 			vscode.setState({ text });
+			break;
 		}
 		case 'templates': {
 			// The extension host pushes the workspace template list into the
@@ -100,6 +101,15 @@ window.addEventListener('message', (event) => {
 			if (window.markdownToolbar) {
 				window.markdownToolbar.setTemplates(message.templates);
 			}
+			break;
+		}
+		case 'outputFolder': {
+			// The chosen generation output folder (set through the toolbar
+			// file-browser button or the markdownEditor.outputFolder setting).
+			if (window.markdownToolbar) {
+				window.markdownToolbar.setOutputFolder(message.folder || '');
+			}
+			break;
 		}
 		case 'scrollChanged': {
 			// TODO

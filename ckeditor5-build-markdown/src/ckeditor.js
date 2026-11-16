@@ -180,10 +180,11 @@ MarkdownEditor.builtinPlugins = [
 			{ id: 'docx', label: 'Word (.docx)' }
 		];
 
-		const state = { templates: [], template: null, format: null };
+		const state = { templates: [], template: null, format: null, outputFolder: null };
 		const generateButtons = [];
 		const templateDropdowns = [];
 		const formatDropdowns = [];
+		const outputFolderButtons = [];
 
 		const postMessage = (message) => {
 			if (window.vscode) {
@@ -270,7 +271,8 @@ MarkdownEditor.builtinPlugins = [
 			getState: () => ({
 				template: state.template,
 				format: state.format,
-				templates: state.templates.slice()
+				templates: state.templates.slice(),
+				outputFolder: state.outputFolder
 			}),
 			setTemplates: (templates) => {
 				state.templates = Array.isArray(templates)
@@ -294,6 +296,15 @@ MarkdownEditor.builtinPlugins = [
 					updateFormatDropdowns();
 					updateGenerateButtons();
 					postMessage({ type: 'formatSelected', format });
+				}
+			},
+			setOutputFolder: (folder) => {
+				state.outputFolder = typeof folder === 'string' && folder !== '' ? folder : null;
+				for (const buttonView of outputFolderButtons) {
+					buttonView.label = state.outputFolder ? state.outputFolder : 'Output folder';
+					buttonView.tooltip = state.outputFolder
+						? 'Generated files go to: ' + state.outputFolder + ' (click to change)'
+						: 'Choose the folder where generated files are written';
 				}
 			}
 		};
@@ -352,6 +363,40 @@ MarkdownEditor.builtinPlugins = [
 			updateFormatDropdowns();
 			return dropdownView;
 		});
+
+		editor.ui.componentFactory.add('pickOutputFolder', (locale) => {
+			const buttonView = new ButtonView(locale);
+			buttonView.set({
+				label: 'Output folder',
+				withText: true,
+				icon: OUTPUT_FOLDER_ICON,
+				tooltip: 'Choose the folder where generated files are written'
+			});
+			editor.listenTo(buttonView, 'execute', () => {
+				postMessage({ type: 'pickOutputFolder' });
+			});
+			outputFolderButtons.push(buttonView);
+			return buttonView;
+		});
+
+		// Document action buttons: they ask the extension host to run the
+		// matching VS Code command on the document this editor shows.
+		const commandButtons = [
+			{ name: 'mindmap', command: 'markdownEditor.documentation.mindmap', label: 'Documentation mind map', icon: MINDMAP_ICON },
+			{ name: 'readAloud', command: 'markdownEditor.readAloud', label: 'Read document aloud', icon: SPEAKER_ICON },
+			{ name: 'openDocument', command: 'markdownEditor.documentation.open', label: 'Open document in documentation view', icon: OPEN_DOCUMENT_ICON },
+			{ name: 'listenDocument', command: 'markdownEditor.documentation.listen', label: 'Listen to document', icon: LISTEN_ICON }
+		];
+		for (const { name, command, label, icon } of commandButtons) {
+			editor.ui.componentFactory.add(name, (locale) => {
+				const buttonView = new ButtonView(locale);
+				buttonView.set({ label, icon, tooltip: label });
+				editor.listenTo(buttonView, 'execute', () => {
+					postMessage({ type: 'executeCommand', command });
+				});
+				return buttonView;
+			});
+		}
 	},
 ];
 
@@ -361,6 +406,17 @@ const TEMPLATE_ICON =
 	'<svg viewBox="0 0 20 20" xmlns="http://www.w3.org/2000/svg"><path d="M11 1H3a1 1 0 0 0-1 1v16a1 1 0 0 0 1 1h14a1 1 0 0 0 1-1V7l-7-6z" opacity=".4"/><path d="M11 1v6h6l-6-6z"/><path d="M5 10.5h10V12H5v-1.5zm0 3.3h10v1.5H5v-1.5zM5 17.1h6V18.6H5v-1.5z"/></svg>';
 const FORMAT_ICON =
 	'<svg viewBox="0 0 20 20" xmlns="http://www.w3.org/2000/svg"><path d="M10 1l4.5 4.5H12.5V10h-5V5.5H5.5L10 1z" opacity=".55"/><path d="M2 12.5h16V14H2v-1.5zm0 3.2h16v3.3H2v-3.3z"/></svg>';
+const OUTPUT_FOLDER_ICON =
+	'<svg viewBox="0 0 20 20" xmlns="http://www.w3.org/2000/svg"><path d="M2 4a2 2 0 0 1 2-2h4l2 2.5h6a2 2 0 0 1 2 2V15a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V4z"/><path d="M10 10v5m-2.5-2.5h5" fill="none" stroke="currentColor" stroke-width="1.4" stroke-linecap="round"/></svg>';
+// Same geometry as media/mindmap-light.svg, scaled 24 -> 20.
+const MINDMAP_ICON =
+	'<svg viewBox="0 0 20 20" xmlns="http://www.w3.org/2000/svg" fill="none" stroke="currentColor" stroke-width="1.33" stroke-linecap="round" stroke-linejoin="round"><circle cx="10" cy="10" r="3.33"/><circle cx="3.33" cy="6.67" r="1.67"/><path d="M13.33 10h2.5M4.67 6.67h2.5M12.33 12.33l2.17 2.17"/></svg>';
+const SPEAKER_ICON =
+	'<svg viewBox="0 0 20 20" xmlns="http://www.w3.org/2000/svg"><path d="M3 7v6h4l5 4V3L7 7H3z"/><path d="M13.6 7.2c1 .9 1.7 2 2 3.3l2-.5c-.4-1.7-1.4-3.2-2.7-4.2l-1.3 1.4z" opacity=".55"/><path d="M14.6 5.1c1.9 1.3 3.2 3.3 3.6 5.5l-.1.4-2-.5c.1-.4.1-.9 0-1.3-.3-1.7-1.2-3.2-2.5-4.2l1-1z" opacity=".35"/></svg>';
+const OPEN_DOCUMENT_ICON =
+	'<svg viewBox="0 0 20 20" xmlns="http://www.w3.org/2000/svg"><path d="M2 4a2 2 0 0 1 2-2h4l2 2.5h6a2 2 0 0 1 2 2V15a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V4z" opacity=".35"/><path d="M5 14.5v-2.2l3-3 3 3v2.2H5z" opacity=".7"/><path d="M8.4 9.1l.6-.6 3 3-3 3-.6.6.2-2.6H6l2.4-2.4z"/></svg>';
+const LISTEN_ICON =
+	'<svg viewBox="0 0 20 20" xmlns="http://www.w3.org/2000/svg"><path d="M10 2a7 7 0 0 0-7 7v5.5A1.5 1.5 0 0 0 4.5 16h1.7v-7H4.7v-.5A5.3 5.3 0 0 1 10 3.2a5.3 5.3 0 0 1 5.3 5.3v.5h-1.5v7h1.7a1.5 1.5 0 0 0 1.5-1.5V9a7 7 0 0 0-7-7z"/></svg>';
 
 // Editor configuration.
 MarkdownEditor.defaultConfig = {
@@ -389,7 +445,13 @@ MarkdownEditor.defaultConfig = {
 			'generateCode',
 			'|',
 			'templateSelector',
-			'outputFormat'
+			'outputFormat',
+			'pickOutputFolder',
+			'|',
+			'mindmap',
+			'readAloud',
+			'openDocument',
+			'listenDocument'
 		],
 		shouldNotGroupWhenFull: true
 	},

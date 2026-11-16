@@ -1,7 +1,9 @@
 import { time } from 'console';
 import * as path from 'path';
+import * as fs from 'fs';
 import * as vscode from 'vscode';
 import { extensionState } from './extension';
+import { generateFromTemplate, extensionForFormat, GenerationError, TemplateMapping } from './codeGenerator';
 
 const prettier = require('prettier');
 
@@ -39,6 +41,21 @@ async function collectTemplates(): Promise<ToolbarTemplate[]> {
 	return templates;
 }
 
+// Where generated output files are written: the markdownEditor.outputFolder
+// setting (absolute, or relative to the workspace root), chosen through the
+// toolbar's file-browser button.
+function currentOutputFolder(): string {
+	const configured = vscode.workspace.getConfiguration('markdownEditor').get<string>('outputFolder', '') || '';
+	if (!configured) {
+		return '';
+	}
+	if (path.isAbsolute(configured)) {
+		return configured;
+	}
+	const root = vscode.workspace.workspaceFolders?.[0]?.uri.fsPath;
+	return root ? path.join(root, configured) : configured;
+}
+
 export class MarkdownEditorProvider implements vscode.CustomTextEditorProvider {
 	public static register(context: vscode.ExtensionContext): vscode.Disposable {
 		const provider = new MarkdownEditorProvider(context);
@@ -61,6 +78,62 @@ export class MarkdownEditorProvider implements vscode.CustomTextEditorProvider {
 		void collectTemplates().then((templates) => {
 			webviewPanel.webview.postMessage({ type: 'templates', templates });
 		});
+	}
+
+	// Tell the toolbar which output folder is currently configured.
+	private sendOutputFolder(webviewPanel: vscode.WebviewPanel) {
+		webviewPanel.webview.postMessage({
+			type: 'outputFolder',
+			folder: vscode.workspace
+				.getConfiguration('markdownEditor')
+				.get<string>('outputFolder', '')
+				|| '',
+		});
+	}
+
+	// The toolbar's file-browser button: native folder picker, stored in the
+	// markdownEditor.outputFolder workspace setting.
+	private async pickOutputFolder(webviewPanel: vscode.WebviewPanel) {
+		const dirs = await vscode.window.showOpenDialog({
+			canSelectFiles: false,
+			canSelectFolders: true,
+			canSelectMany: false,
+			openLabel: 'Set as generation output folder',
+		});
+		const dir = dirs?.[0];
+		if (!dir) {
+			return;
+		}
+		const configured = vscode.workspace.isTrusted
+			? path.isAbsolute(dir.fsPath)
+				? dir.fsPath
+				: vscode.workspace.asRelativePath(dir.fsPath)
+			: '';
+		await vscode.workspace
+			.getConfiguration('markdownEditor')
+			.update('outputFolder', configured, vscode.ConfigurationTarget.Workspace);
+		this.sendOutputFolder(webviewPanel);
+	}
+
+	// Document action buttons on the second toolbar row run these extension
+	// commands on the document the webview is showing.
+	private executeDocumentCommand(document: vscode.TextDocument, command: string) {
+		const DOCUMENT_COMMANDS = [
+			'markdownEditor.documentation.mindmap',
+			'markdownEditor.readAloud',
+			'markdownEditor.documentation.open',
+			'markdownEditor.documentation.listen',
+		];
+		if (!DOCUMENT_COMMANDS.includes(command)) {
+			return;
+		}
+		if (command === 'markdownEditor.documentation.open' || command === 'markdownEditor.documentation.listen') {
+			// The explorer commands take a node argument; for the current
+			// document the node id is the document uri string.
+			void vscode.commands.executeCommand(command, { id: document.uri.toString() });
+			return;
+		}
+		void vscode.commands.executeCommand(command);
 	}
 
 	// Called when our custom editor is opened.
@@ -171,6 +244,11 @@ export class MarkdownEditorProvider implements vscode.CustomTextEditorProvider {
 				this.sendTemplates(webviewPanel);
 			}
 		});
+		const onDidChangeOutputFolder = vscode.workspace.onDidChangeConfiguration((e) => {
+			if (e.affectsConfiguration('markdownEditor.outputFolder')) {
+				this.sendOutputFolder(webviewPanel);
+			}
+		});
 
 		// Make sure we get rid of the listener when our editor is closed.
 		webviewPanel.onDidDispose(() => {
@@ -188,6 +266,7 @@ export class MarkdownEditorProvider implements vscode.CustomTextEditorProvider {
 			onDidCreateTemplates.dispose();
 			onDidDeleteTemplates.dispose();
 			onDidSaveTemplate.dispose();
+			onDidChangeOutputFolder.dispose();
 		});
 
 		// Receive message from the webview.
@@ -200,6 +279,7 @@ export class MarkdownEditorProvider implements vscode.CustomTextEditorProvider {
 				case 'initialized':
 					updateWebview();
 					this.sendTemplates(webviewPanel);
+					this.sendOutputFolder(webviewPanel);
 					return;
 				case 'plainPaste':
 					vscode.commands.executeCommand('editor.action.clipboardPasteAction');
@@ -213,14 +293,19 @@ export class MarkdownEditorProvider implements vscode.CustomTextEditorProvider {
 				case 'generateRequest':
 					void this.handleGenerateRequest(e);
 					return;
+				case 'pickOutputFolder':
+					void this.pickOutputFolder(webviewPanel);
+					return;
+				case 'executeCommand':
+					this.executeDocumentCommand(document, e.command);
+					return;
 			}
 		});
 	}
 
-	// Handle the toolbar's Generate button (second toolbar row).
-	// Validates the selected template and reports the request. The table-sync
-	// code generation engine documented in TEMPLATE-SYNC.md / DOCX-TEMPLATES.md
-	// is not part of this build yet, so generation itself is pending.
+	// Handle the toolbar's Generate button (second toolbar row): reads the
+	// selected template mapping, extracts the marked Markdown table and
+	// writes the output file in the selected format (see codeGenerator.ts).
 	private async handleGenerateRequest(e: any): Promise<void> {
 		const templatePath = typeof e.template === 'string' ? e.template : null;
 		const format = typeof e.format === 'string' ? e.format : null;
@@ -232,7 +317,7 @@ export class MarkdownEditorProvider implements vscode.CustomTextEditorProvider {
 			return;
 		}
 
-		let mapping: any;
+		let mapping: TemplateMapping;
 		try {
 			const raw = await vscode.workspace.fs.readFile(vscode.Uri.file(templatePath));
 			mapping = JSON.parse(Buffer.from(raw).toString('utf8'));
@@ -251,14 +336,32 @@ export class MarkdownEditorProvider implements vscode.CustomTextEditorProvider {
 			);
 			return;
 		}
+		if (!mapping.table || typeof mapping.table !== 'string') {
+			vscode.window.showErrorMessage(
+				`Markdown Editor: template "${path.basename(templatePath)}" is missing "table".`
+			);
+			return;
+		}
 
-		// TODO: wire in the table-sync generation engine (see TEMPLATE-SYNC.md)
-		// and produce mapping.output here.
-		vscode.window.showInformationMessage(
-			`Markdown Editor: generation for "${mapping.output}" (${
-				format ?? mapping.format ?? 'unknown format'
-			}) is not implemented in this build yet.`
-		);
+		const mappingDir = path.dirname(templatePath);
+		const markdownPath = path.resolve(mappingDir, mapping.markdown);
+		const requestedFormat = format ?? mapping.format ?? path.extname(mapping.output).slice(1);
+		// The selected format decides the output file extension.
+		let outputBase = path.basename(mapping.output).replace(/\.[^.]+$/, '');
+		let outAbs: string;
+		try {
+			const markdownText = await fs.promises.readFile(markdownPath, 'utf8');
+			const outputFolder = currentOutputFolder();
+			outAbs = path.join(outputFolder || mappingDir, outputBase + '.' + extensionForFormat(requestedFormat));
+			await generateFromTemplate(mapping, markdownText, requestedFormat, outAbs);
+		} catch (err: any) {
+			const message = err instanceof GenerationError ? err.message : `generation failed: ${err?.message ?? err}`;
+			vscode.window.showErrorMessage(`Markdown Editor: ${message}`);
+			return;
+		}
+
+		const rel = vscode.workspace.asRelativePath(outAbs, true) || outAbs;
+		vscode.window.showInformationMessage(`Markdown Editor: generated ${rel} (${extensionForFormat(requestedFormat)}).`);
 	}
 
 	// Get the static html used for the editor webviews.

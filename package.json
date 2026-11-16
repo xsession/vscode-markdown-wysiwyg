@@ -209,15 +209,6 @@
           "when": "resourceLangId == markdown && markdownEditor.editorIsActive"
         },
         {
-          "command": "markdownEditor.readAloud",
-          "group": "navigation@2",
-          "when": "resourceLangId == markdown"
-        },
-        {
-          "command": "markdownEditor.documentation.mindmap",
-          "group": "navigation@3"
-        },
-        {
           "command": "markdownEditor.readDocument",
           "group": "navigation@4",
           "when": "resourceExtname =~ /\\.(md|markdown|mdown|txt|text|html|htm|xhtml|pdf|docx|odt|epub|rtf|rst|rest|adoc|asciidoc)$/i"
@@ -335,6 +326,11 @@
     "configuration": {
       "title": "Markdown Editor Piper",
       "properties": {
+        "markdownEditor.outputFolder": {
+          "type": "string",
+          "default": "",
+          "description": "Folder where code generation writes output files (absolute path, or relative to the workspace root). Empty = next to the template file. Settable from the editor toolbar's output-folder button."
+        },
         "markdownEditor.piper.executable": {
           "type": "string",
           "default": "auto",

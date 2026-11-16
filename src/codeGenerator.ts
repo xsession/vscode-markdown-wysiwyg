@@ -171,7 +171,11 @@ function emitDelimited(mapping: TemplateMapping, rows: Record<string, unknown>[]
 		lines.push(
 			names
 				.map((name) => {
-					const text = cellText(name, row[name], mapping.columns[name].type);
+					let text = cellText(name, row[name], mapping.columns[name].type);
+					if (delimiter === '	') {
+						// TSV consumers rarely support quoted multi-line cells — escape newlines.
+						text = text.replace(/\r?\n/g, '\\n');
+					}
 					if (text.includes(delimiter) || text.includes('"') || text.includes('\n')) {
 						return '"' + text.replace(/"/g, '""') + '"';
 					}
@@ -245,8 +249,9 @@ function tomlValue(value: unknown): string {
 
 function emitToml(mapping: TemplateMapping, rows: Record<string, unknown>[]): string {
 	const root = (mapping.root && mapping.root.length ? mapping.root : [mapping.table]).join('.');
-	const lines: string[] = ['[[' + root + ']]'];
+	const lines: string[] = [];
 	for (const row of rows.map((r) => flattenMapped(mapping, r))) {
+		lines.push('[' + '[' + root + ']' + ']');
 		const emit = (node: Record<string, unknown>, prefix: string): void => {
 			for (const [key, value] of Object.entries(node)) {
 				const dotted = prefix ? prefix + '.' + key : key;
@@ -270,17 +275,6 @@ function emitXml(mapping: TemplateMapping, rows: Record<string, unknown>[]): str
 	for (const row of rows) {
 		lines.push('  '.repeat(root.length + 1) + '<row>');
 		for (const [name, col] of Object.entries(mapping.columns)) {
-			const pad = '  '.repeat(root.length + 2);
-			const build = (segments: string[], i: number, value: unknown): void => {
-				if (i === segments.length) {
-					lines.push(pad + xmlEscape(value));
-					return;
-				}
-				lines.push(pad + '<' + segments[i] + '>');
-				build(segments, i + 1, value);
-				lines.padStart(0);
-				lines.splice(lines.length - 1, 0, pad + '</' + segments[i] + '>');
-			};
 			// Nested paths become nested elements.
 			const buildNested = (segments: string[], depth: number, value: unknown): void => {
 				const pad = '  '.repeat(root.length + 2 + depth);
@@ -293,7 +287,6 @@ function emitXml(mapping: TemplateMapping, rows: Record<string, unknown>[]): str
 				lines.push(pad + '</' + segments[depth] + '>');
 			};
 			buildNested(col.path, 0, row[name] ?? null);
-			void build;
 		}
 		lines.push('  '.repeat(root.length + 1) + '</row>');
 	}
@@ -379,27 +372,6 @@ function emitHtml(mapping: TemplateMapping, rows: Record<string, unknown>[]): st
 	);
 }
 
-function docxXml(table: string, names: string[], rows: Record<string, unknown>[]): string {
-	const cell = (text: string) =>
-		'<w:tc><w:tcPr><w:tcW w:w="0" w:type="auto"/></w:tcPr><w:p><w:r><w:t xml:space="preserve">' +
-		xmlEscape(text) +
-		'</w:t></w:r></w:p></w:tc>';
-	const row = (cells: string[]) => '<w:tr>' + cells.join('') + '</w:tr>';
-	const trs = [row(names.map((n) => cell(n))), ...rows.map((r) => row(names.map((n) => cell(cellText(n, r[n], mapping_type(r, n))))))];
-	return (
-		'<?xml version="1.0" encoding="UTF-8" standalone="yes"?>\n<w:document xmlns:w="http://schemas.openxmlformats.org/wordprocessingml/2006/main"><w:body>' +
-		'<w:p><w:r><w:t xml:space="preserve">' +
-		xmlEscape(table) +
-		'</w:t></w:r></w:p><w:tbl><w:tblPr><w:tblStyle w:val="TableGrid"/><w:tblW w:w="0" w:type="auto"/></w:tblPr>' +
-		trs.join('') +
-		'</w:tbl><w:sectPr><w:pgSz w:w="11906" w:h="16838"/></w:sectPr></w:body></w:document>'
-	);
-}
-function mapping_type(row: Record<string, unknown>, name: string): string {
-	void row;
-	return 'string';
-}
-
 function emitDocx(mapping: TemplateMapping, rows: Record<string, unknown>[], outAbs: string): Promise<void> {
 	if (mapping.docx && mapping.docx.template) {
 		throw new GenerationError('Template-based DOCX generation (corporate master) is pending in this build. Generate to a text format, or run the template wizard later.');
@@ -446,8 +418,8 @@ export async function generateFromTemplate(
 	format: string,
 	outAbs: string
 ): Promise<void> {
-	const fmt = extensionForFormat(format);
-	if (!EXTENSIONS[fmt] && fmt !== format.toLowerCase()) {
+	const name = format.toLowerCase();
+	if (!EXTENSIONS[name]) {
 		throw new GenerationError('Unknown output format: ' + format);
 	}
 	const rows = extractTableRows(markdown, mapping.table);
@@ -462,12 +434,12 @@ export async function generateFromTemplate(
 	if (exists) {
 		await fs.promises.copyFile(outAbs, outAbs + '.table-sync.bak');
 	}
-	if (fmt === 'docx') {
+	if (name === 'docx') {
 		await emitDocx(mapping, data, outAbs);
 		return;
 	}
 	let text: string;
-	switch (fmt) {
+	switch (name) {
 		case 'csv':
 			text = emitDelimited(mapping, data, ',');
 			break;
@@ -499,7 +471,7 @@ export async function generateFromTemplate(
 			text = emitHtml(mapping, data);
 			break;
 		default:
-			throw new GenerationError('No generator for format: ' + fmt);
+			throw new GenerationError('No generator for format: ' + name);
 	}
 	await fs.promises.writeFile(outAbs, text, 'utf8');
 }
