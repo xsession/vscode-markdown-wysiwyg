@@ -1,0 +1,27 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 256 256" width="256" height="256">
+  <!-- Background -->
+  <rect width="256" height="256" rx="48" fill="#1e1e2e"/>
+
+  <!-- Left: Markdown "M↓" -->
+  <g transform="translate(36, 88)">
+    <rect x="0" y="0" width="64" height="80" rx="8" fill="none" stroke="#58c4dc" stroke-width="5"/>
+    <text x="32" y="38" font-family="Arial, sans-serif" font-weight="bold" font-size="36" fill="#58c4dc" text-anchor="middle">M</text>
+    <path d="M32 48 L32 70 M24 62 L32 70 L40 62" fill="none" stroke="#58c4dc" stroke-width="5" stroke-linecap="round" stroke-linejoin="round"/>
+  </g>
+
+  <!-- Right: YAML "Y" -->
+  <g transform="translate(156, 88)">
+    <rect x="0" y="0" width="64" height="80" rx="8" fill="none" stroke="#cb83db" stroke-width="5"/>
+    <text x="32" y="58" font-family="Arial, sans-serif" font-weight="bold" font-size="48" fill="#cb83db" text-anchor="middle">Y</text>
+  </g>
+
+  <!-- Bidirectional arrows in center -->
+  <g stroke="#cdd6f4" stroke-width="5" stroke-linecap="round" fill="none">
+    <!-- Top arrow → -->
+    <line x1="100" y1="112" x2="156" y2="112"/>
+    <polyline points="146,104 156,112 146,120"/>
+    <!-- Bottom arrow ← -->
+    <line x1="156" y1="148" x2="100" y2="148"/>
+    <polyline points="110,140 100,148 110,156"/>
+  </g>
+</svg>   

@@ -1,12 +1,30 @@
 $ErrorActionPreference = 'Stop'
 Set-Location (Join-Path $PSScriptRoot '..')
 function Find-Python {
-    foreach ($candidate in @('py', 'python', 'python3')) {
-        if (Get-Command $candidate -ErrorAction SilentlyContinue) {
-            & $candidate -c 'import sys; sys.exit(0 if sys.version_info >= (3,12) else 1)' 2>$null
-            if ($LASTEXITCODE -eq 0) { return $candidate }
-        }
+    # Microsoft Store "python is not installed" stubs print to stderr and, with
+    # $ErrorActionPreference = 'Stop', would abort the script instead of falling through.
+    $previous = $ErrorActionPreference
+    $ErrorActionPreference = 'Continue'
+    $candidates = @('py', 'python', 'python3')
+    # Winget's per-user install (e.g. Programs\Python\Python312) is not always
+    # on the current process PATH yet, so probe the known location directly.
+    $pythonHome = Join-Path $env:LOCALAPPDATA 'Programs\Python'
+    if (Test-Path $pythonHome) {
+        $candidates += (Get-ChildItem $pythonHome -Directory -ErrorAction SilentlyContinue |
+            Where-Object { Test-Path (Join-Path $_.FullName 'python.exe') } |
+            ForEach-Object { Join-Path $_.FullName 'python.exe' })
     }
+    foreach ($candidate in $candidates) {
+        $isPath = $candidate -match '\\|/'
+        if ($isPath) {
+            if (-not (Test-Path $candidate)) { continue }
+        } else {
+            if (-not (Get-Command $candidate -ErrorAction SilentlyContinue)) { continue }
+        }
+        $null = & $candidate -c 'import sys; sys.exit(0 if sys.version_info >= (3,12) else 1)' 2>&1
+        if ($LASTEXITCODE -eq 0) { $ErrorActionPreference = $previous; return $candidate }
+    }
+    $ErrorActionPreference = $previous
     return $null
 }
 function Install-Prerequisite($id) {

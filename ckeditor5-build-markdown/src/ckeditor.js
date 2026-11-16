@@ -34,6 +34,8 @@ import Superscript from '@ckeditor/ckeditor5-basic-styles/src/superscript';
 import Table from '@ckeditor/ckeditor5-table/src/table';
 import TableToolbar from '@ckeditor/ckeditor5-table/src/tabletoolbar';
 import Underline from '@ckeditor/ckeditor5-basic-styles/src/underline';
+import { ButtonView, Model, createDropdown, addListToDropdown } from '@ckeditor/ckeditor5-ui';
+import { Collection } from '@ckeditor/ckeditor5-utils';
 
 import './styles.css';
 // import './github-markdown.css';
@@ -153,7 +155,212 @@ MarkdownEditor.builtinPlugins = [
 		editor.keystrokes.set('Ctrl+Shift+n', attemptCommands([() => editor.execute('numberedList')]));
 		editor.keystrokes.set('Ctrl+Q', attemptCommands([() => editor.execute('bold')]));
 	},
+
+	///////////////////////////////////////////////////////
+	// Code generation toolbar (second row): a generate
+	// button, a template selector and an output format
+	// selector. The user's selections are posted to the
+	// extension host through window.vscode.postMessage
+	// and the host pushes the workspace template list
+	// back through window.markdownToolbar.
+	///////////////////////////////////////////////////////
+
+	function (editor) {
+		const OUTPUT_FORMATS = [
+			{ id: 'yaml', label: 'YAML (.yml)' },
+			{ id: 'json', label: 'JSON (.json)' },
+			{ id: 'toml', label: 'TOML (.toml)' },
+			{ id: 'xml', label: 'XML (.xml)' },
+			{ id: 'csv', label: 'CSV (.csv)' },
+			{ id: 'tsv', label: 'TSV (.tsv)' },
+			{ id: 'ini', label: 'INI (.ini)' },
+			{ id: 'env', label: 'Environment (.env)' },
+			{ id: 'properties', label: 'Java properties (.properties)' },
+			{ id: 'html', label: 'HTML (.html)' },
+			{ id: 'docx', label: 'Word (.docx)' }
+		];
+
+		const state = { templates: [], template: null, format: null };
+		const generateButtons = [];
+		const templateDropdowns = [];
+		const formatDropdowns = [];
+
+		const postMessage = (message) => {
+			if (window.vscode) {
+				window.vscode.postMessage(message);
+			}
+		};
+
+		const formatById = (id) => OUTPUT_FORMATS.find((format) => format.id === id) || null;
+		const templateByPath = (path) => state.templates.find((template) => template.path === path) || null;
+
+		const updateGenerateButtons = () => {
+			for (const buttonView of generateButtons) {
+				buttonView.isEnabled = Boolean(state.template && state.format);
+			}
+		};
+
+		const updateTemplateDropdowns = () => {
+			const selected = templateByPath(state.template);
+			for (const { dropdownView, items } of templateDropdowns) {
+				items.clear();
+				if (state.templates.length === 0) {
+					items.add({
+						type: 'button',
+						model: new Model({
+							label: 'No templates found in workspace',
+							withText: true,
+							isEnabled: false
+						})
+					});
+				}
+				for (const template of state.templates) {
+					items.add({
+						type: 'button',
+						model: new Model({
+							label: template.name,
+							withText: true,
+							isOn: template.path === state.template,
+							templatePath: template.path
+						})
+					});
+				}
+				dropdownView.buttonView.label = selected ? selected.name : 'Template';
+				dropdownView.buttonView.withText = Boolean(selected);
+				dropdownView.buttonView.isEnabled = state.templates.length > 0;
+			}
+		};
+
+		const updateFormatDropdowns = () => {
+			const selected = formatById(state.format);
+			for (const { dropdownView, items } of formatDropdowns) {
+				// Rebuild the list so the selection highlight always derives
+				// from state (bundled Model instances don't expose .get()).
+				items.clear();
+				for (const format of OUTPUT_FORMATS) {
+					items.add({
+						type: 'button',
+						model: new Model({
+							label: format.label,
+							withText: true,
+							isOn: format.id === state.format,
+							formatId: format.id
+						})
+					});
+				}
+				dropdownView.buttonView.label = selected ? selected.label : 'Format';
+				dropdownView.buttonView.withText = Boolean(selected);
+			}
+		};
+
+		const applyTemplate = (path) => {
+			state.template = path;
+			const chosen = templateByPath(path);
+			if (chosen && chosen.format && formatById(chosen.format)) {
+				state.format = chosen.format;
+			}
+			updateTemplateDropdowns();
+			updateFormatDropdowns();
+			updateGenerateButtons();
+		};
+
+		// Public webview API used by the extension host messages (see
+		// markdownEditorInitScript.js).
+		window.markdownToolbar = {
+			getState: () => ({
+				template: state.template,
+				format: state.format,
+				templates: state.templates.slice()
+			}),
+			setTemplates: (templates) => {
+				state.templates = Array.isArray(templates)
+					? templates.filter((template) => template && typeof template.path === 'string')
+					: [];
+				if (state.template && !templateByPath(state.template)) {
+					state.template = null;
+				}
+				updateTemplateDropdowns();
+				updateGenerateButtons();
+			},
+			setTemplate: (path) => {
+				if (templateByPath(path)) {
+					applyTemplate(path);
+					postMessage({ type: 'templateSelected', template: path, format: state.format });
+				}
+			},
+			setFormat: (format) => {
+				if (formatById(format)) {
+					state.format = format;
+					updateFormatDropdowns();
+					updateGenerateButtons();
+					postMessage({ type: 'formatSelected', format });
+				}
+			}
+		};
+
+		editor.ui.componentFactory.add('generateCode', (locale) => {
+			const buttonView = new ButtonView(locale);
+			buttonView.set({
+				label: 'Generate',
+				icon: GENERATOR_ICON,
+				tooltip: 'Generate output from Markdown',
+				isEnabled: false
+			});
+			editor.listenTo(buttonView, 'execute', () => {
+				postMessage({ type: 'generateRequest', template: state.template, format: state.format });
+			});
+			generateButtons.push(buttonView);
+			return buttonView;
+		});
+
+		editor.ui.componentFactory.add('templateSelector', (locale) => {
+			const items = new Collection();
+			const dropdownView = createDropdown(locale);
+			addListToDropdown(dropdownView, items);
+			dropdownView.buttonView.set({
+				label: 'Template',
+				icon: TEMPLATE_ICON,
+				tooltip: 'Template',
+				isEnabled: false
+			});
+			editor.listenTo(dropdownView, 'execute', (evt) => {
+				const path = evt.source.templatePath;
+				applyTemplate(path);
+				postMessage({ type: 'templateSelected', template: path, format: state.format });
+			});
+			templateDropdowns.push({ dropdownView, items });
+			updateTemplateDropdowns();
+			return dropdownView;
+		});
+
+		editor.ui.componentFactory.add('outputFormat', (locale) => {
+			const items = new Collection();
+			const dropdownView = createDropdown(locale);
+			addListToDropdown(dropdownView, items);
+			dropdownView.buttonView.set({
+				label: 'Format',
+				icon: FORMAT_ICON,
+				tooltip: 'Output file format'
+			});
+			editor.listenTo(dropdownView, 'execute', (evt) => {
+				state.format = evt.source.formatId;
+				postMessage({ type: 'formatSelected', format: state.format });
+				updateFormatDropdowns();
+				updateGenerateButtons();
+			});
+			formatDropdowns.push({ dropdownView, items });
+			updateFormatDropdowns();
+			return dropdownView;
+		});
+	},
 ];
+
+const GENERATOR_ICON =
+	'<svg viewBox="0 0 20 20" xmlns="http://www.w3.org/2000/svg"><path d="M1.5 2a1 1 0 0 1 1-1h6.086a1.5 1.5 0 0 1 1.06.44l2.414 2.414A1.5 1.5 0 0 1 13.5 5.914V18a1 1 0 0 1-1 1h-10a1 1 0 0 1-1-1V2zm1 .906V18h9V6.086L9.086 2.906H2.5z"/><path d="m12.3 8.7 4.2 3.3-4.2 3.3-.9-1.1 2.5-2.2-2.5-2.2.9-1.1z"/></svg>';
+const TEMPLATE_ICON =
+	'<svg viewBox="0 0 20 20" xmlns="http://www.w3.org/2000/svg"><path d="M11 1H3a1 1 0 0 0-1 1v16a1 1 0 0 0 1 1h14a1 1 0 0 0 1-1V7l-7-6z" opacity=".4"/><path d="M11 1v6h6l-6-6z"/><path d="M5 10.5h10V12H5v-1.5zm0 3.3h10v1.5H5v-1.5zM5 17.1h6V18.6H5v-1.5z"/></svg>';
+const FORMAT_ICON =
+	'<svg viewBox="0 0 20 20" xmlns="http://www.w3.org/2000/svg"><path d="M10 1l4.5 4.5H12.5V10h-5V5.5H5.5L10 1z" opacity=".55"/><path d="M2 12.5h16V14H2v-1.5zm0 3.2h16v3.3H2v-3.3z"/></svg>';
 
 // Editor configuration.
 MarkdownEditor.defaultConfig = {
@@ -176,9 +383,15 @@ MarkdownEditor.defaultConfig = {
 			'insertImage',
 			'insertTable',
 			'horizontalLine',
-			// '|',
-			// 'sourceEditing',
+			// '-' is a toolbar line break: it starts the second toolbar row.
+			// It only works when shouldNotGroupWhenFull is true.
+			'-',
+			'generateCode',
+			'|',
+			'templateSelector',
+			'outputFormat'
 		],
+		shouldNotGroupWhenFull: true
 	},
 	image: {
 		toolbar: ['imageStyle:full', 'imageStyle:side', '|', 'imageTextAlternative'],
@@ -206,11 +419,8 @@ MarkdownEditor.defaultConfig = {
 			{ language: 'css', label: 'CSS' },
 			{ language: 'diff', label: 'Diff' },
 			{ language: 'html', label: 'HTML' },
-			{ language: 'java', label: 'Java' },
 			{ language: 'javascript', label: 'JavaScript' },
-			{ language: 'php', label: 'PHP' },
 			{ language: 'python', label: 'Python' },
-			{ language: 'ruby', label: 'Ruby' },
 			{ language: 'typescript', label: 'TypeScript' },
 			{ language: 'xml', label: 'XML' },
 		],

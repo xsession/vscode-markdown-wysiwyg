@@ -1,8 +1,43 @@
 import { time } from 'console';
+import * as path from 'path';
 import * as vscode from 'vscode';
 import { extensionState } from './extension';
 
 const prettier = require('prettier');
+
+// Table template mapping files (see TEMPLATE-SYNC.md). The toolbar's template
+// selector lists every mapping file in the workspace.
+const TEMPLATE_GLOB = '**/*.table-template.json';
+const TEMPLATE_EXCLUDES =
+	'{**/node_modules/**,**/dist/**,**/dist_/**,**/out/**,**/out_/**,**/.git/**}';
+
+export interface ToolbarTemplate {
+	name: string;
+	path: string;
+	format?: string;
+	output?: string;
+}
+
+async function collectTemplates(): Promise<ToolbarTemplate[]> {
+	const uris = await vscode.workspace.findFiles(TEMPLATE_GLOB, TEMPLATE_EXCLUDES, 200);
+	const templates: ToolbarTemplate[] = [];
+	for (const uri of uris) {
+		try {
+			const raw = await vscode.workspace.fs.readFile(uri);
+			const mapping = JSON.parse(Buffer.from(raw).toString('utf8'));
+			templates.push({
+				name: path.basename(uri.fsPath).replace(/\.table-template\.json$/, ''),
+				path: uri.fsPath,
+				format: typeof mapping.format === 'string' ? mapping.format : undefined,
+				output: typeof mapping.output === 'string' ? mapping.output : undefined,
+			});
+		} catch (err) {
+			console.warn('Skipping invalid table template', uri.fsPath, err);
+		}
+	}
+	templates.sort((a, b) => a.name.localeCompare(b.name));
+	return templates;
+}
 
 export class MarkdownEditorProvider implements vscode.CustomTextEditorProvider {
 	public static register(context: vscode.ExtensionContext): vscode.Disposable {
@@ -20,6 +55,13 @@ export class MarkdownEditorProvider implements vscode.CustomTextEditorProvider {
 	static readonly viewType = 'markdownEditor.customEditor';
 
 	constructor(private readonly context: vscode.ExtensionContext) {}
+
+	// Push the workspace template list into the editor's toolbar template selector.
+	private sendTemplates(webviewPanel: vscode.WebviewPanel) {
+		void collectTemplates().then((templates) => {
+			webviewPanel.webview.postMessage({ type: 'templates', templates });
+		});
+	}
 
 	// Called when our custom editor is opened.
 	public async resolveCustomTextEditor(
@@ -112,6 +154,24 @@ export class MarkdownEditorProvider implements vscode.CustomTextEditorProvider {
 			}
 		);
 
+		// Keep the toolbar's template selector in sync with the workspace.
+		const isTemplateFile = (uri: vscode.Uri) => uri.fsPath.endsWith('.table-template.json');
+		const onDidCreateTemplates = vscode.workspace.onDidCreateFiles((e) => {
+			if (e.files.some(isTemplateFile)) {
+				this.sendTemplates(webviewPanel);
+			}
+		});
+		const onDidDeleteTemplates = vscode.workspace.onDidDeleteFiles((e) => {
+			if (e.files.some(isTemplateFile)) {
+				this.sendTemplates(webviewPanel);
+			}
+		});
+		const onDidSaveTemplate = vscode.workspace.onDidSaveTextDocument((e) => {
+			if (isTemplateFile(e.uri)) {
+				this.sendTemplates(webviewPanel);
+			}
+		});
+
 		// Make sure we get rid of the listener when our editor is closed.
 		webviewPanel.onDidDispose(() => {
 			console.log('Disposed1');
@@ -125,6 +185,9 @@ export class MarkdownEditorProvider implements vscode.CustomTextEditorProvider {
 			console.log('Disposed2');
 			changeDocumentSubscription.dispose();
 			saveDocumentSubscription.dispose();
+			onDidCreateTemplates.dispose();
+			onDidDeleteTemplates.dispose();
+			onDidSaveTemplate.dispose();
 		});
 
 		// Receive message from the webview.
@@ -136,11 +199,66 @@ export class MarkdownEditorProvider implements vscode.CustomTextEditorProvider {
 					return;
 				case 'initialized':
 					updateWebview();
+					this.sendTemplates(webviewPanel);
 					return;
 				case 'plainPaste':
 					vscode.commands.executeCommand('editor.action.clipboardPasteAction');
+					return;
+				case 'templateSelected':
+					console.log('templateSelected', e.template);
+					return;
+				case 'formatSelected':
+					console.log('formatSelected', e.format);
+					return;
+				case 'generateRequest':
+					void this.handleGenerateRequest(e);
+					return;
 			}
 		});
+	}
+
+	// Handle the toolbar's Generate button (second toolbar row).
+	// Validates the selected template and reports the request. The table-sync
+	// code generation engine documented in TEMPLATE-SYNC.md / DOCX-TEMPLATES.md
+	// is not part of this build yet, so generation itself is pending.
+	private async handleGenerateRequest(e: any): Promise<void> {
+		const templatePath = typeof e.template === 'string' ? e.template : null;
+		const format = typeof e.format === 'string' ? e.format : null;
+
+		if (!templatePath) {
+			vscode.window.showInformationMessage(
+				'Markdown Editor: select a template in the toolbar before generating.'
+			);
+			return;
+		}
+
+		let mapping: any;
+		try {
+			const raw = await vscode.workspace.fs.readFile(vscode.Uri.file(templatePath));
+			mapping = JSON.parse(Buffer.from(raw).toString('utf8'));
+		} catch (err: any) {
+			vscode.window.showErrorMessage(
+				`Markdown Editor: could not read template "${path.basename(templatePath)}": ${
+					err?.message ?? err
+				}`
+			);
+			return;
+		}
+
+		if (!mapping || typeof mapping.markdown !== 'string' || typeof mapping.output !== 'string') {
+			vscode.window.showErrorMessage(
+				`Markdown Editor: template "${path.basename(templatePath)}" is missing "markdown" or "output".`
+			);
+			return;
+		}
+
+		// TODO: wire in the table-sync generation engine (see TEMPLATE-SYNC.md)
+		// and produce mapping.output here.
+		vscode.window.showInformationMessage(
+			`Markdown Editor: generation for "${mapping.output}" (${
+				format ?? mapping.format ?? 'unknown format'
+			}) is not implemented in this build yet.`
+		);
 	}
 
 	// Get the static html used for the editor webviews.

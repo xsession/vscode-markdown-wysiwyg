@@ -93,6 +93,14 @@ window.addEventListener('message', (event) => {
 			// This state is returned in the call to `vscode.getState` below when a webview is reloaded.
 			vscode.setState({ text });
 		}
+		case 'templates': {
+			// The extension host pushes the workspace template list into the
+			// toolbar's template selector (see the code generation plugin in
+			// ckeditor5-build-markdown/src/ckeditor.js).
+			if (window.markdownToolbar) {
+				window.markdownToolbar.setTemplates(message.templates);
+			}
+		}
 		case 'scrollChanged': {
 			// TODO
 		}
