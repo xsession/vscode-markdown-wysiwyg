@@ -1,3 +1,11 @@
+# New in 0.16.0: Corporate Word templates
+
+Use existing DOCX/DOTX corporate templates with two-way Markdown table and tagged-text synchronization. Multiple tables, stable Word tags/captions, binary backups and lock detection are supported. See [DOCX-TEMPLATES.md](DOCX-TEMPLATES.md) and [corporate example](examples/table-sync/docx).
+
+# New in 0.15.0: Ten editable template formats
+
+Create YAML, JSON, TOML, XML, CSV, TSV, INI, .env, Java properties and HTML table templates with custom output paths and automatic two-way save synchronization. See [TEMPLATE-SYNC.md](TEMPLATE-SYNC.md) and [examples/table-sync](examples/table-sync).
+
 # Markdown Editor with an offline listening workspace
 
 View/edit Markdown in the existing CKEditor WYSIWYG editor, or consume a long
