@@ -10,3 +10,9 @@ resources/voices/**/*.onnx
 *.partial
 
 resources/runtime/
+
+dist_/
+
+out_/
+
+.vscode/settings.json
