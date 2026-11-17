@@ -1,0 +1,71 @@
+# Regenerated from demo_fpga_types.md by register-map-to-yaml.j2
+types:
+  deviceId:
+    size: 32
+    format: enum
+    doc: "Unique device identifier"
+    values:
+      Unknown: 0
+      DemoBoardA: 256
+      DemoBoardB: 257
+    fpga:
+      flags: [read]
+    codegen:
+      c:
+        naming: snake_case
+  controlWord:
+    size: 32
+    format: bitfield
+    doc: "Top-level control register"
+    fields:
+      enable:
+        size: 1
+        doc: "Master enable. 1-active."
+      mode:
+        size: 2
+        doc: "0: idle; 1: capture; 2: stream."
+      controlWord_padding:
+        size: 29
+        doc: "N/A"
+    fpga:
+      flags: [read, write]
+    codegen:
+      c:
+        naming: snake_case
+  sampleCount:
+    size: 32
+    format: bitfield
+    doc: "Number of captured samples"
+    fields:
+      count:
+        size: 20
+        doc: "Captured sample count."
+      sampleCount_padding:
+        size: 12
+        doc: "N/A"
+    fpga:
+      flags: [read]
+    codegen:
+      c:
+        naming: snake_case
+  scratchArray:
+    size: calc
+    format: array
+    bit_width: 32
+    length: 8
+    doc: "Software scratch space, 8 words."
+    fpga:
+      flags: [read, write]
+    codegen:
+      c:
+        naming: snake_case
+  demoFpgaRegs:
+    format: struct
+    fields:
+      deviceId: EXT__deviceId
+      controlWord: EXT__controlWord
+      sampleCount: EXT__sampleCount
+      scratchArray: EXT__scratchArray
+    codegen:
+      c:
+        naming: snake_case

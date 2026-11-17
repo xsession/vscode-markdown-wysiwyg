@@ -428,7 +428,7 @@
     "webpack-dev": "webpack --mode development --watch",
     "test-compile": "tsc -p ./",
     "lint": "eslint . --ext .ts,.tsx",
-    "test": "npm run test-compile && node tests/speechText.test.js && node tests/listeningDocument.test.js && node tests/speechEngine.test.js && node tests/piperReader.test.js && node tests/voiceManager.test.js && node tests/documentationIndex.test.js && node tests/documentationExplorer.test.js && node tests/documentFormats.test.js && node tests/documentLoader.test.js && node tests/listeningWorkspace.test.js && node tests/projectListening.test.js && node tests/localAssistant.test.js",
+    "test": "npm run test-compile && node tests/speechText.test.js && node tests/listeningDocument.test.js && node tests/speechEngine.test.js && node tests/piperReader.test.js && node tests/voiceManager.test.js && node tests/documentationIndex.test.js && node tests/documentationExplorer.test.js && node tests/documentFormats.test.js && node tests/documentLoader.test.js && node tests/listeningWorkspace.test.js && node tests/projectListening.test.js && node tests/localAssistant.test.js && node tests/jinjaTemplate.test.js",
     "voices:bundle": "python scripts/bundle_voices.py",
     "voices:verify": "node scripts/verify-voices.js",
     "runtime:verify": "node scripts/verify-runtime.js",

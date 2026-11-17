@@ -4,6 +4,8 @@ import * as fs from 'fs';
 import * as vscode from 'vscode';
 import { extensionState } from './extension';
 import { generateFromTemplate, extensionForFormat, GenerationError, TemplateMapping } from './codeGenerator';
+import { renderTemplate, splitTemplateFile, TemplateError } from './jinjaTemplate';
+import { buildMarkdownContext } from './markdownTables';
 
 const prettier = require('prettier');
 
@@ -12,6 +14,11 @@ const prettier = require('prettier');
 const TEMPLATE_GLOB = '**/*.table-template.json';
 const TEMPLATE_EXCLUDES =
 	'{**/node_modules/**,**/dist/**,**/dist_/**,**/out/**,**/out_/**,**/.git/**}';
+
+// Jinja conversion templates (see JINJA-TEMPLATES.md): the Template button
+// opens a file browser for one of these, the TypeScript backend renders it
+// against the opened Markdown document.
+const JINJA_TEMPLATE_EXTS = new Set(['.j2', '.jinja', '.jnt']);
 
 export interface ToolbarTemplate {
 	name: string;
@@ -113,6 +120,50 @@ export class MarkdownEditorProvider implements vscode.CustomTextEditorProvider {
 			.getConfiguration('markdownEditor')
 			.update('outputFolder', configured, vscode.ConfigurationTarget.Workspace);
 		this.sendOutputFolder(webviewPanel);
+	}
+
+	// The toolbar's Template button: native file browser for a Jinja
+	// conversion template. The picked file is validated here (front matter +
+	// nonempty body) and reported back to the webview, which sets the
+	// toolbar's template state (name, and the default output format when the
+	// template declares one).
+	private async pickTemplate(webviewPanel: vscode.WebviewPanel) {
+		const files = await vscode.window.showOpenDialog({
+			canSelectFiles: true,
+			canSelectFolders: false,
+			canSelectMany: false,
+			openLabel: 'Select conversion template',
+			filters: {
+				'Jinja templates': ['j2', 'jinja', 'jnt'],
+				'All files': ['*']
+			}
+		});
+		const file = files?.[0];
+		if (!file) {
+			return;
+		}
+		let raw: string;
+		try {
+			raw = Buffer.from(await vscode.workspace.fs.readFile(file)).toString('utf8');
+		} catch (err: any) {
+			vscode.window.showErrorMessage(
+				`Markdown Editor: could not read template "${path.basename(file.fsPath)}": ${err?.message ?? err}`
+			);
+			return;
+		}
+		const { metadata, body } = splitTemplateFile(raw);
+		if (!body.trim()) {
+			vscode.window.showErrorMessage(
+				`Markdown Editor: template "${path.basename(file.fsPath)}" has no Jinja body.`
+			);
+			return;
+		}
+		webviewPanel.webview.postMessage({
+			type: 'templatePicked',
+			path: file.fsPath,
+			name: metadata.name || path.basename(file.fsPath),
+			format: metadata.format
+		});
 	}
 
 	// Document action buttons on the second toolbar row run these extension
@@ -291,7 +342,10 @@ export class MarkdownEditorProvider implements vscode.CustomTextEditorProvider {
 					console.log('formatSelected', e.format);
 					return;
 				case 'generateRequest':
-					void this.handleGenerateRequest(e);
+					void this.handleGenerateRequest(e, document);
+					return;
+				case 'pickTemplate':
+					void this.pickTemplate(webviewPanel);
 					return;
 				case 'pickOutputFolder':
 					void this.pickOutputFolder(webviewPanel);
@@ -303,10 +357,70 @@ export class MarkdownEditorProvider implements vscode.CustomTextEditorProvider {
 		});
 	}
 
-	// Handle the toolbar's Generate button (second toolbar row): reads the
-	// selected template mapping, extracts the marked Markdown table and
-	// writes the output file in the selected format (see codeGenerator.ts).
-	private async handleGenerateRequest(e: any): Promise<void> {
+	// Generate output with a Jinja conversion template: read the template
+	// file, render its body against the opened Markdown document, and write
+	// the result into the output folder with the selected format's extension
+	// (or the format the template declares).
+	private async generateWithJinjaTemplate(e: any, document: vscode.TextDocument): Promise<void> {
+		const templatePath: string = e.template;
+		const format = typeof e.format === 'string' ? e.format : null;
+		const baseName = path.basename(templatePath);
+
+		let raw: string;
+		try {
+			raw = await fs.promises.readFile(templatePath, 'utf8');
+		} catch (err: any) {
+			vscode.window.showErrorMessage(
+				`Markdown Editor: could not read template "${baseName}": ${err?.message ?? err}`
+			);
+			return;
+		}
+
+		const { metadata, params, body } = splitTemplateFile(raw);
+		if (!body.trim()) {
+			vscode.window.showErrorMessage(
+				`Markdown Editor: template "${baseName}" has no Jinja body.`
+			);
+			return;
+		}
+		const requestedFormat = format ?? metadata.format ?? 'yaml';
+
+		let outAbs: string;
+		try {
+			const context = buildMarkdownContext(document.getText(), path.basename(document.fileName));
+			context.params = params;
+			const text = renderTemplate(body, context);
+			// Output name: the template's "output" basename when declared,
+			// otherwise the opened document's basename; extension from format.
+			const base = metadata.output
+				? path.basename(metadata.output).replace(/\.[^.]+$/, '')
+				: path.basename(document.fileName).replace(/\.[^.]+$/, '');
+			const outputFolder = currentOutputFolder();
+			outAbs = path.join(
+				outputFolder || path.dirname(templatePath),
+				base + '.' + extensionForFormat(requestedFormat)
+			);
+			await fs.promises.mkdir(path.dirname(outAbs), { recursive: true });
+			await fs.promises.writeFile(outAbs, text, 'utf8');
+		} catch (err: any) {
+			const message =
+				err instanceof TemplateError ? err.message : `generation failed: ${err?.message ?? err}`;
+			vscode.window.showErrorMessage(`Markdown Editor: ${message}`);
+			return;
+		}
+
+		const rel = vscode.workspace.asRelativePath(outAbs, true) || outAbs;
+		vscode.window.showInformationMessage(
+			`Markdown Editor: generated ${rel} (${extensionForFormat(requestedFormat)}).`
+		);
+	}
+
+	// Handle the toolbar's Generate button (second toolbar row):
+	// - Jinja templates (.j2/.jinja/.jnt): render the template against the
+	//   opened Markdown document (TypeScript backend, see jinjaTemplate.ts).
+	// - Legacy .table-template.json mappings: the structured column-mapping
+	//   generator in codeGenerator.ts.
+	private async handleGenerateRequest(e: any, document: vscode.TextDocument): Promise<void> {
 		const templatePath = typeof e.template === 'string' ? e.template : null;
 		const format = typeof e.format === 'string' ? e.format : null;
 
@@ -314,6 +428,11 @@ export class MarkdownEditorProvider implements vscode.CustomTextEditorProvider {
 			vscode.window.showInformationMessage(
 				'Markdown Editor: select a template in the toolbar before generating.'
 			);
+			return;
+		}
+
+		if (JINJA_TEMPLATE_EXTS.has(path.extname(templatePath).toLowerCase())) {
+			await this.generateWithJinjaTemplate(e, document);
 			return;
 		}
 

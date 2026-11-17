@@ -158,11 +158,13 @@ MarkdownEditor.builtinPlugins = [
 
 	///////////////////////////////////////////////////////
 	// Code generation toolbar (second row): a generate
-	// button, a template selector and an output format
-	// selector. The user's selections are posted to the
-	// extension host through window.vscode.postMessage
-	// and the host pushes the workspace template list
-	// back through window.markdownToolbar.
+	// button, a template button and an output format
+	// selector. The Template button opens the extension
+	// host's native file browser for a Jinja conversion
+	// template; selections are posted to the extension
+	// host through window.vscode.postMessage, and the
+	// host pushes state back through
+	// window.markdownToolbar.
 	///////////////////////////////////////////////////////
 
 	function (editor) {
@@ -180,9 +182,9 @@ MarkdownEditor.builtinPlugins = [
 			{ id: 'docx', label: 'Word (.docx)' }
 		];
 
-		const state = { templates: [], template: null, format: null, outputFolder: null };
+		const state = { templates: [], template: null, templateName: null, format: null, outputFolder: null };
 		const generateButtons = [];
-		const templateDropdowns = [];
+		const templateButtons = [];
 		const formatDropdowns = [];
 		const outputFolderButtons = [];
 
@@ -193,7 +195,6 @@ MarkdownEditor.builtinPlugins = [
 		};
 
 		const formatById = (id) => OUTPUT_FORMATS.find((format) => format.id === id) || null;
-		const templateByPath = (path) => state.templates.find((template) => template.path === path) || null;
 
 		const updateGenerateButtons = () => {
 			for (const buttonView of generateButtons) {
@@ -201,34 +202,12 @@ MarkdownEditor.builtinPlugins = [
 			}
 		};
 
-		const updateTemplateDropdowns = () => {
-			const selected = templateByPath(state.template);
-			for (const { dropdownView, items } of templateDropdowns) {
-				items.clear();
-				if (state.templates.length === 0) {
-					items.add({
-						type: 'button',
-						model: new Model({
-							label: 'No templates found in workspace',
-							withText: true,
-							isEnabled: false
-						})
-					});
-				}
-				for (const template of state.templates) {
-					items.add({
-						type: 'button',
-						model: new Model({
-							label: template.name,
-							withText: true,
-							isOn: template.path === state.template,
-							templatePath: template.path
-						})
-					});
-				}
-				dropdownView.buttonView.label = selected ? selected.name : 'Template';
-				dropdownView.buttonView.withText = Boolean(selected);
-				dropdownView.buttonView.isEnabled = state.templates.length > 0;
+		const updateTemplateButtons = () => {
+			for (const buttonView of templateButtons) {
+				buttonView.label = state.templateName || 'Template';
+				buttonView.withText = Boolean(state.template);
+				// Always clickable: it opens the native file browser.
+				buttonView.isEnabled = true;
 			}
 		};
 
@@ -254,17 +233,6 @@ MarkdownEditor.builtinPlugins = [
 			}
 		};
 
-		const applyTemplate = (path) => {
-			state.template = path;
-			const chosen = templateByPath(path);
-			if (chosen && chosen.format && formatById(chosen.format)) {
-				state.format = chosen.format;
-			}
-			updateTemplateDropdowns();
-			updateFormatDropdowns();
-			updateGenerateButtons();
-		};
-
 		// Public webview API used by the extension host messages (see
 		// markdownEditorInitScript.js).
 		window.markdownToolbar = {
@@ -278,17 +246,25 @@ MarkdownEditor.builtinPlugins = [
 				state.templates = Array.isArray(templates)
 					? templates.filter((template) => template && typeof template.path === 'string')
 					: [];
-				if (state.template && !templateByPath(state.template)) {
-					state.template = null;
-				}
-				updateTemplateDropdowns();
 				updateGenerateButtons();
 			},
-			setTemplate: (path) => {
-				if (templateByPath(path)) {
-					applyTemplate(path);
-					postMessage({ type: 'templateSelected', template: path, format: state.format });
+			// Generalized: (path) keeps the legacy call shape; (path, name,
+			// format) is used after the Template button's file browser picks a
+			// Jinja template (the extension host sends 'templatePicked').
+			setTemplate: (path, name, format) => {
+				if (typeof path !== 'string' || path === '') {
+					return;
 				}
+				state.template = path;
+				state.templateName =
+					typeof name === 'string' && name !== '' ? name : path.split(/[\\/]/).pop();
+				if (format && formatById(format)) {
+					state.format = format;
+					updateFormatDropdowns();
+				}
+				updateTemplateButtons();
+				updateGenerateButtons();
+				postMessage({ type: 'templateSelected', template: path, format: state.format });
 			},
 			setFormat: (format) => {
 				if (formatById(format)) {
@@ -324,24 +300,23 @@ MarkdownEditor.builtinPlugins = [
 			return buttonView;
 		});
 
+		// The Template button opens the extension host's native file browser
+		// (see markdownEditor.ts pickTemplate). The picked Jinja template's
+		// name (and declared output format) are pushed back through
+		// window.markdownToolbar.setTemplate.
 		editor.ui.componentFactory.add('templateSelector', (locale) => {
-			const items = new Collection();
-			const dropdownView = createDropdown(locale);
-			addListToDropdown(dropdownView, items);
-			dropdownView.buttonView.set({
+			const buttonView = new ButtonView(locale);
+			buttonView.set({
 				label: 'Template',
 				icon: TEMPLATE_ICON,
-				tooltip: 'Template',
-				isEnabled: false
+				tooltip: 'Choose a conversion template (Jinja file)'
 			});
-			editor.listenTo(dropdownView, 'execute', (evt) => {
-				const path = evt.source.templatePath;
-				applyTemplate(path);
-				postMessage({ type: 'templateSelected', template: path, format: state.format });
+			editor.listenTo(buttonView, 'execute', () => {
+				postMessage({ type: 'pickTemplate' });
 			});
-			templateDropdowns.push({ dropdownView, items });
-			updateTemplateDropdowns();
-			return dropdownView;
+			templateButtons.push(buttonView);
+			updateTemplateButtons();
+			return buttonView;
 		});
 
 		editor.ui.componentFactory.add('outputFormat', (locale) => {

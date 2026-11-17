@@ -1,0 +1,6 @@
+| Offset | Word | Name | Size | Format | Access | Description |
+|--------|------|------|------|--------|--------|-------------|
+| 0 | 0 | deviceId | 4 byte | enum | R | Unique device identifier<br><table><tr><th>Value</th><th>Name</th></tr><tr><td>0</td><td>Unknown</td></tr><tr><td>256</td><td>DemoBoardA</td></tr><tr><td>257</td><td>DemoBoardB</td></tr></table> |
+| 4 | 1 | controlWord | 4 byte | bitfield | R/W | Top-level control register<br><table><tr><th>Offset</th><th>Name</th><th>Size</th><th>Type</th><th>Description</th></tr><tr><td>bit 0</td><td>enable</td><td>1 bit</td><td>u1</td><td>Master enable. 1-active.</td></tr><tr><td>bit 1</td><td>mode</td><td>2 bit</td><td>u2</td><td>0: idle; 1: capture; 2: stream.</td></tr><tr><td>bit 3</td><td>reserved</td><td>29 bit</td><td>u29</td><td></td></tr></table> |
+| 8 | 2 | sampleCount | 4 byte | bitfield | R | Number of captured samples<br><table><tr><th>Offset</th><th>Name</th><th>Size</th><th>Type</th><th>Description</th></tr><tr><td>bit 0</td><td>count</td><td>20 bit</td><td>u20</td><td>Captured sample count.</td></tr><tr><td>bit 20</td><td>reserved</td><td>12 bit</td><td>u12</td><td></td></tr></table> |
+| 12 | 3–10 | scratchArray | 32 byte | array | R/W | Software scratch space, 8 words. — Array: 8 x u32 (4 byte elements) |

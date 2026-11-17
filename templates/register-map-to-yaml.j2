@@ -1,0 +1,90 @@
+---
+name: Register map to YAML
+format: yaml
+struct_name: demoFpgaRegs
+---
+{#-
+  register-map-to-yaml.j2 — first bundled Jinja conversion template.
+
+  Inverse of yaml_template_examples/generic/generate_md.py: reads the
+  register-map Markdown table
+    Offset | Word | Name | Size | Format | Access | Description
+  and re-emits the *_fpga_types.yaml type definitions.
+
+  Context (TypeScript backend, see JINJA-TEMPLATES.md):
+    source   basename of the opened Markdown document
+    rows     data rows of the first Markdown table
+             (r.Offset, r.Word, r.Name, r.Size, r.Format, r.Access, r.Description)
+    params   front-matter keys of this template (struct_name, ...)
+
+  Conversion notes (what the Markdown table knows and what it does not):
+  - enum values are emitted as the decimal numbers shown in the table
+    (generate_md.py prints 0x100 as 256 — the value is the same).
+  - a bitfield's padding row appears as "reserved" in the table, so the
+    field name is reconstructed as <register>_padding with doc "N/A".
+  - the original codegen block is not present in the table; the constant
+    snake_case block below is emitted for every register — edit or delete
+    it if your project uses different codegen settings.
+-#}
+# Regenerated from {{ source }} by register-map-to-yaml.j2
+types:
+{%- for r in rows %}
+  {{ r.Name }}:
+{%- if r.Format == 'array' %}
+    size: calc
+    format: array
+    bit_width: {{ r.Description | array_info.bit_width }}
+    length: {{ r.Description | array_info.length }}
+    doc: {{ r.Description | desc_base | yaml_q }}
+    fpga:
+      flags: [{{ r.Access | access_flags | join(', ') }}]
+{%- elif r.Format == 'enum' %}
+    size: {{ r.Size | size_bits }}
+    format: enum
+    doc: {{ r.Description | desc_base | yaml_q }}
+    values:
+{%- for v in r.Description | desc_rows[1:] %}
+      {{ v[1] }}: {{ v[0] }}
+{%- endfor %}
+    fpga:
+      flags: [{{ r.Access | access_flags | join(', ') }}]
+{%- elif r.Format == 'bitfield' %}
+    size: {{ r.Size | size_bits }}
+    format: bitfield
+    doc: {{ r.Description | desc_base | yaml_q }}
+    fields:
+{%- for f in r.Description | desc_rows[1:] %}
+{%- if f[1] == 'reserved' %}
+      {{ r.Name }}_padding:
+        size: {{ f[2] | size_bits }}
+        doc: "N/A"
+{%- else %}
+      {{ f[1] }}:
+        size: {{ f[2] | size_bits }}
+        doc: {{ f[4] | yaml_q }}
+{%- endif %}
+{%- endfor %}
+    fpga:
+      flags: [{{ r.Access | access_flags | join(', ') }}]
+{%- else %}
+    size: {{ r.Size | size_bits }}
+    format: {{ r.Format }}
+    doc: {{ r.Description | desc_base | yaml_q }}
+    fpga:
+      flags: [{{ r.Access | access_flags | join(', ') }}]
+{%- endif %}
+    codegen:
+      c:
+        naming: snake_case
+{%- endfor %}
+{%- if params.struct_name %}
+  {{ params.struct_name }}:
+    format: struct
+    fields:
+{%- for r in rows %}
+      {{ r.Name }}: EXT__{{ r.Name }}
+{%- endfor %}
+    codegen:
+      c:
+        naming: snake_case
+{%- endif %}

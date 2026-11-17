@@ -103,6 +103,15 @@ window.addEventListener('message', (event) => {
 			}
 			break;
 		}
+		case 'templatePicked': {
+			// The toolbar's Template button opened a file browser; the host
+			// reports the picked Jinja template (path, display name and the
+			// output format declared in its front matter, when any).
+			if (window.markdownToolbar) {
+				window.markdownToolbar.setTemplate(message.path, message.name, message.format);
+			}
+			break;
+		}
 		case 'outputFolder': {
 			// The chosen generation output folder (set through the toolbar
 			// file-browser button or the markdownEditor.outputFolder setting).

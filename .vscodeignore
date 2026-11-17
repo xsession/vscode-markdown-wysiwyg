@@ -25,10 +25,14 @@
 !schemas/**/*
 !examples/table-sync/**/*
 !TEMPLATE-SYNC.md
+!templates/**/*
+!JINJA-TEMPLATES.md
 
 
 
 !DOCX-TEMPLATES.md
+
+
 
 
 
