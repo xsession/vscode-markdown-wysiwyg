@@ -112,4 +112,15 @@ export function activate(context: vscode.ExtensionContext) {
 			vscode.commands.executeCommand('vscode.openWith', uri, 'default');
 		});
 	});
+
+	// Persist the toolbar's output-folder selection: markdownEditor.ts
+	// pickOutputFolder calls this command after the native folder picker, and
+	// currentOutputFolder() reads the setting for every generate request.
+	registerCommand('markdownEditor.setOutputFolder', async (folder?: string) => {
+		await vscode.workspace.getConfiguration('markdownEditor').update(
+			'outputFolder',
+			typeof folder === 'string' ? folder : '',
+			vscode.ConfigurationTarget.Global
+		);
+	});
 }

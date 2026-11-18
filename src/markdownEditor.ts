@@ -386,6 +386,7 @@ export class MarkdownEditorProvider implements vscode.CustomTextEditorProvider {
 		const requestedFormat = format ?? metadata.format ?? 'yaml';
 
 		let outAbs: string;
+		let usedFolder = '';
 		try {
 			const context = buildMarkdownContext(document.getText(), path.basename(document.fileName));
 			context.params = params;
@@ -395,9 +396,9 @@ export class MarkdownEditorProvider implements vscode.CustomTextEditorProvider {
 			const base = metadata.output
 				? path.basename(metadata.output).replace(/\.[^.]+$/, '')
 				: path.basename(document.fileName).replace(/\.[^.]+$/, '');
-			const outputFolder = currentOutputFolder();
+			usedFolder = currentOutputFolder();
 			outAbs = path.join(
-				outputFolder || path.dirname(templatePath),
+				usedFolder || path.dirname(templatePath),
 				base + '.' + extensionForFormat(requestedFormat)
 			);
 			await fs.promises.mkdir(path.dirname(outAbs), { recursive: true });
@@ -410,8 +411,11 @@ export class MarkdownEditorProvider implements vscode.CustomTextEditorProvider {
 		}
 
 		const rel = vscode.workspace.asRelativePath(outAbs, true) || outAbs;
+		const folderNote = usedFolder
+			? ''
+			: ' (no output folder set — written next to the template file)';
 		vscode.window.showInformationMessage(
-			`Markdown Editor: generated ${rel} (${extensionForFormat(requestedFormat)}).`
+			`Markdown Editor: generated ${rel} (${extensionForFormat(requestedFormat)})${folderNote}.`
 		);
 	}
 
