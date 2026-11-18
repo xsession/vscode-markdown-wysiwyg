@@ -6,25 +6,35 @@ struct_name: demoFpgaRegs
 {#-
   register-map-to-yaml.j2 — first bundled Jinja conversion template.
 
-  Inverse of yaml_template_examples/generic/generate_md.py: reads the
-  register-map Markdown table
+  Inverse of yaml_template_examples/generic/generate_md.py: reads a
+  register-map Markdown document
     Offset | Word | Name | Size | Format | Access | Description
   and re-emits the *_fpga_types.yaml type definitions.
 
+  Both document styles are supported:
+  - one continuous table with the description + nested field/enum table
+    INSIDE the Description cell (demo_fpga_types.md);
+  - each register as a single pipe row (a lone line, with bare "|"
+    separator lines), followed by a prose description and the nested
+    field/enum table as separate lines (pab1_fpga_types.md).
+  row_doc(r) / row_subrows(r) work for both styles.
+
   Context (TypeScript backend, see JINJA-TEMPLATES.md):
     source   basename of the opened Markdown document
-    rows     data rows of the first Markdown table
+    rows     register rows in document order
              (r.Offset, r.Word, r.Name, r.Size, r.Format, r.Access, r.Description)
     params   front-matter keys of this template (struct_name, ...)
 
-  Conversion notes (what the Markdown table knows and what it does not):
-  - enum values are emitted as the decimal numbers shown in the table
+  Conversion notes (what the Markdown document knows and what it does not):
+  - enum values are emitted as the numbers shown in the table
     (generate_md.py prints 0x100 as 256 — the value is the same).
   - a bitfield's padding row appears as "reserved" in the table, so the
     field name is reconstructed as <register>_padding with doc "N/A".
   - the original codegen block is not present in the table; the constant
     snake_case block below is emitted for every register — edit or delete
     it if your project uses different codegen settings.
+  - the struct (params.struct_name) collects all registers in document
+    order; remove the struct_name front-matter line to skip it.
 -#}
 # Regenerated from {{ source }} by register-map-to-yaml.j2
 types:
@@ -35,15 +45,15 @@ types:
     format: array
     bit_width: {{ r.Description | array_info.bit_width }}
     length: {{ r.Description | array_info.length }}
-    doc: {{ r.Description | desc_base | yaml_q }}
+    doc: {{ r | row_doc | yaml_q }}
     fpga:
       flags: [{{ r.Access | access_flags | join(', ') }}]
 {%- elif r.Format == 'enum' %}
     size: {{ r.Size | size_bits }}
     format: enum
-    doc: {{ r.Description | desc_base | yaml_q }}
+    doc: {{ r | row_doc | yaml_q }}
     values:
-{%- for v in r.Description | desc_rows[1:] %}
+{%- for v in r | row_subrows %}
       {{ v[1] }}: {{ v[0] }}
 {%- endfor %}
     fpga:
@@ -51,9 +61,9 @@ types:
 {%- elif r.Format == 'bitfield' %}
     size: {{ r.Size | size_bits }}
     format: bitfield
-    doc: {{ r.Description | desc_base | yaml_q }}
+    doc: {{ r | row_doc | yaml_q }}
     fields:
-{%- for f in r.Description | desc_rows[1:] %}
+{%- for f in r | row_subrows %}
 {%- if f[1] == 'reserved' %}
       {{ r.Name }}_padding:
         size: {{ f[2] | size_bits }}
@@ -61,7 +71,7 @@ types:
 {%- else %}
       {{ f[1] }}:
         size: {{ f[2] | size_bits }}
-        doc: {{ f[4] | yaml_q }}
+        doc: {{ f[4] | default('N/A') | yaml_q }}
 {%- endif %}
 {%- endfor %}
     fpga:
@@ -69,7 +79,7 @@ types:
 {%- else %}
     size: {{ r.Size | size_bits }}
     format: {{ r.Format }}
-    doc: {{ r.Description | desc_base | yaml_q }}
+    doc: {{ r | row_doc | yaml_q }}
     fpga:
       flags: [{{ r.Access | access_flags | join(', ') }}]
 {%- endif %}

@@ -2,7 +2,7 @@ const assert = require('assert');
 const fs = require('fs');
 const path = require('path');
 const { renderTemplate, splitTemplateFile, sizeBits, accessFlags, descBase, arrayInfo, parseTableRows } = require('../out/jinjaTemplate');
-const { parseMarkdownTables, buildMarkdownContext, splitTableCells } = require('../out/markdownTables');
+const { parseMarkdownTables, buildMarkdownContext, splitTableCells, buildRegisterRows, rowDoc, rowSubRows } = require('../out/markdownTables');
 
 const eq = (a, b, msg) => assert.strictEqual(a, b, msg);
 
@@ -125,6 +125,7 @@ eq(sizeBits('32'), 32, 'sizeBits plain');
 eq(sizeBits('0x20'), 32, 'sizeBits hex');
 eq(sizeBits('nope'), 0, 'sizeBits fallback');
 assert.deepStrictEqual(accessFlags('R/W'), ['read', 'write'], 'accessFlags RW');
+assert.deepStrictEqual(accessFlags('RW'), ['read', 'write'], 'accessFlags joined RW');
 assert.deepStrictEqual(accessFlags('R'), ['read'], 'accessFlags R');
 assert.deepStrictEqual(accessFlags('—'), [], 'accessFlags em dash');
 eq(
@@ -239,5 +240,47 @@ for (const l of lines) {
 	assert(!l.includes('\t'), 'no tabs in generated YAML: ' + l);
 	assert(/^\s*(#.*)?$/.test(l) || /^\s*[^:\s][^:]*:(\s+.*)?$/.test(l), 'YAML line shape: ' + l);
 }
+
+// --------------------------------------------------------------------------- //
+// Register-map document style 2: one-line register rows + prose + nested
+// tables as separate lines (pab1_fpga_types.md), merged into register rows.
+// --------------------------------------------------------------------------- //
+const pab1Md = fs.readFileSync(path.join(__dirname, 'fixtures', 'pab1-register-map.md'), 'utf8');
+const pab1Rows = buildRegisterRows(pab1Md);
+eq(pab1Rows.length, 12, 'pab1: all 12 register rows found');
+assert.deepStrictEqual(
+	pab1Rows.map((r) => r.Name),
+	['firmwareVersion', 'hwVersion', 'pciExpressType', 'pcieEngine', 'dataChannelInterface', 'numOfDataChannels', 'c2hStreamBufferStatus', 'testDataControl', 'blockSize', 'bandwidthControl', 'acqControl', 'streamBufferSize'],
+	'pab1: rows in document order'
+);
+// First row (inside the header table): prose + nested table attached.
+eq(pab1Rows[0].Format, 'bitfield', 'pab1: format cell');
+assert.deepStrictEqual(accessFlags(pab1Rows[0].Access), ['read', 'write'], 'pab1: RW access');
+eq(rowDoc(pab1Rows[0]), 'Firmware version', 'pab1: attached prose doc');
+eq(rowSubRows(pab1Rows[0]).length, 2, 'pab1: subtable data rows (header/separator dropped)');
+eq(rowSubRows(pab1Rows[0])[0][1], 'minorVersion', 'pab1: subtable field name');
+// Lone-line register (no Description column in the row): doc + enum values.
+eq(rowDoc(pab1Rows[1]), 'HW version', 'pab1: lone-row doc');
+assert.deepStrictEqual(rowSubRows(pab1Rows[1]).map((v) => v[1]), ['Non-defined', 'AC701', 'Z0', 'Z1'], 'pab1: enum value names');
+// Inline-Description register (no attached prose): rowDoc falls back to the cell.
+assert(rowDoc(pab1Rows[8]).startsWith('Block size.'), 'pab1: inline doc fallback');
+eq(rowSubRows(pab1Rows[8]).length, 0, 'pab1: uint register has no subtable');
+
+// End-to-end: same bundled template, style-2 document, user-set struct name.
+const pab1Ctx = buildMarkdownContext(pab1Md, 'pab1_fpga_types.md');
+pab1Ctx.params = { struct_name: 'pab1FpgaRegs' };
+const pab1Out = renderTemplate(body, pab1Ctx);
+const pab1Expected = fs.readFileSync(path.join(__dirname, 'fixtures', 'pab1-register-map.expected.yaml'), 'utf8');
+eq(pab1Out, pab1Expected, 'pab1 rendered output matches expected YAML byte-for-byte');
+const p1 = pab1Out.split('\n');
+const p1line = (s) => p1.filter((l) => l === s);
+eq(p1line('  hwVersion:').length, 1, 'pab1: lone-line register in output');
+eq(p1line('    format: enum').length, 3, 'pab1: three enum registers');
+eq(p1line('      AXI-Stream: 1').length, 1, 'pab1: enum value');
+eq(p1line('      flags: [read, write]').length, 5, 'pab1: RW/R-W flags expanded');
+eq(p1line('      flags: [read]').length, 7, 'pab1: read-only flags');
+eq(p1line('      testDataControl_padding:').length, 1, 'pab1: padding reconstructed');
+eq(p1line('  pab1FpgaRegs:').length, 1, 'pab1: struct from params');
+eq(p1.filter((l) => l.includes(': EXT__')).length, 12, 'pab1: struct has all 12 registers');
 
 console.log('Jinja template engine, markdown tables and register-map-to-yaml.j2 passed');

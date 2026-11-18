@@ -36,7 +36,10 @@ import {
 	isPadding,
 	htmlUnescape,
 	stripHtmlTags,
-	unescapeMarkdownCell
+	unescapeMarkdownCell,
+	rowDoc,
+	rowSubRows,
+	ParsedRow
 } from './markdownTables';
 
 export class TemplateError extends Error {}
@@ -722,6 +725,12 @@ function makeFilters(): Record<string, FilterFn> {
 		access_flags: (v) => accessFlags(String(v ?? '')),
 		desc_base: (v) => descBase(String(v ?? '')),
 		desc_rows: (v) => parseTableRows(String(v ?? '')),
+		row_doc: (v) =>
+			v !== null && typeof v === 'object' ? rowDoc(v as ParsedRow) : descBase(String(v ?? '')),
+		row_subrows: (v) =>
+			v !== null && typeof v === 'object'
+				? rowSubRows(v as ParsedRow)
+				: parseTableRows(String(v ?? '')).slice(1),
 		array_info: (v) => arrayInfo(String(v ?? '')),
 		is_padding: (v) => isPadding(String(v ?? ''))
 	};

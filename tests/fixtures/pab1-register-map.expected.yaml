@@ -1,0 +1,196 @@
+# Regenerated from pab1_fpga_types.md by register-map-to-yaml.j2
+types:
+  firmwareVersion:
+    size: 32
+    format: bitfield
+    doc: "Firmware version"
+    fields:
+      minorVersion:
+        size: 16
+        doc: "Minor version"
+      majorVersion:
+        size: 16
+        doc: "Major version"
+    fpga:
+      flags: [read, write]
+    codegen:
+      c:
+        naming: snake_case
+  hwVersion:
+    size: 32
+    format: enum
+    doc: "HW version"
+    values:
+      Non-defined: 0
+      AC701: 1
+      Z0: 2
+      Z1: 3
+    fpga:
+      flags: [read]
+    codegen:
+      c:
+        naming: snake_case
+  pciExpressType:
+    size: 32
+    format: bitfield
+    doc: "PCIe type (gen, lanes)"
+    fields:
+      gen:
+        size: 16
+        doc: "PCIe generation type (1,2,3,4)"
+      lanes:
+        size: 16
+        doc: "PCIe numbe of lanes"
+    fpga:
+      flags: [read]
+    codegen:
+      c:
+        naming: snake_case
+  pcieEngine:
+    size: 32
+    format: enum
+    doc: "PCIe engine (XDMA is the only available for now)"
+    values:
+      Non-defined: 0
+      XDMA: 1
+    fpga:
+      flags: [read]
+    codegen:
+      c:
+        naming: snake_case
+  dataChannelInterface:
+    size: 32
+    format: enum
+    doc: "Data channel interface for engine"
+    values:
+      Non-defined: 0
+      AXI-Stream: 1
+      AXI-MM: 2
+    fpga:
+      flags: [read]
+    codegen:
+      c:
+        naming: snake_case
+  numOfDataChannels:
+    size: 32
+    format: bitfield
+    doc: "Number of data channels for C2H and H2C"
+    fields:
+      c2hDataChannels:
+        size: 16
+        doc: "Number of C2H data channels"
+      h2cDataChannels:
+        size: 16
+        doc: "Number of H2C data channels"
+    fpga:
+      flags: [read]
+    codegen:
+      c:
+        naming: snake_case
+  c2hStreamBufferStatus:
+    size: 32
+    format: bitfield
+    doc: "C2H stream buffer statuses"
+    fields:
+      overflowCounts:
+        size: 16
+        doc: "Overflow counts for 128 bit data elements for actual acquisition."
+      xdmaC2hOverflowCounts:
+        size: 16
+        doc: "XDMA C2H overflow counts for 128 bit data elements for actual acquisition."
+    fpga:
+      flags: [read]
+    codegen:
+      c:
+        naming: snake_case
+  testDataControl:
+    size: 32
+    format: bitfield
+    doc: "C2H stream buffer statuses"
+    fields:
+      testDataType:
+        size: 2
+        doc: "0: N/A; 1: Incremental (128 bit) test data.; 2: Pseudo-random (128 bit) test data.; 3: N/A"
+      testDataControl_padding:
+        size: 30
+        doc: "N/A"
+    fpga:
+      flags: [read, write]
+    codegen:
+      c:
+        naming: snake_case
+  blockSize:
+    size: 32
+    format: uint
+    doc: "Block size. The block size can be set in words (32 bit elements). Only multiples of 4 is acceptable (because of the 128 bit interface - easy). The default value: 14400."
+    fpga:
+      flags: [read, write]
+    codegen:
+      c:
+        naming: snake_case
+  bandwidthControl:
+    size: 32
+    format: bitfield
+    doc: "Bandwidth control settings."
+    fields:
+      frameRateReduction:
+        size: 8
+        doc: "The purpose of this register is to set the frame rate. The calculation for bandwith based on the register is the following: 16\\*(frameReduction+1)/256 \\[Gb/s\\]. The default value: 79 -> 5 Gb/s."
+      bandwidthControl_padding:
+        size: 24
+        doc: "N/A"
+    fpga:
+      flags: [read, write]
+    codegen:
+      c:
+        naming: snake_case
+  acqControl:
+    size: 32
+    format: bitfield
+    doc: "Acquisition control bits."
+    fields:
+      acqOn:
+        size: 1
+        doc: "Acquisition on. Rising edge starts and falling edge stops the acquisition."
+      acqControl_padding:
+        size: 31
+        doc: "N/A"
+    fpga:
+      flags: [read, write]
+    codegen:
+      c:
+        naming: snake_case
+  streamBufferSize:
+    size: 32
+    format: bitfield
+    doc: "Buffer size. Readback value of the available buffer size in KB."
+    fields:
+      streamBufferSizeKB:
+        size: 16
+        doc: "Stream buffer size in KB."
+      streamBufferSize_padding:
+        size: 16
+        doc: "N/A"
+    fpga:
+      flags: [read]
+    codegen:
+      c:
+        naming: snake_case
+  pab1FpgaRegs:
+    format: struct
+    fields:
+      firmwareVersion: EXT__firmwareVersion
+      hwVersion: EXT__hwVersion
+      pciExpressType: EXT__pciExpressType
+      pcieEngine: EXT__pcieEngine
+      dataChannelInterface: EXT__dataChannelInterface
+      numOfDataChannels: EXT__numOfDataChannels
+      c2hStreamBufferStatus: EXT__c2hStreamBufferStatus
+      testDataControl: EXT__testDataControl
+      blockSize: EXT__blockSize
+      bandwidthControl: EXT__bandwidthControl
+      acqControl: EXT__acqControl
+      streamBufferSize: EXT__streamBufferSize
+    codegen:
+      c:
+        naming: snake_case
