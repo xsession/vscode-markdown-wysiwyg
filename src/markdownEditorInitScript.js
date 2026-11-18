@@ -2,21 +2,32 @@
 
 // Get a reference to the VS Code webview api.
 // We use this API to post messages back to our extension.
-
-// This was defined in markdownEditor.ts in the HTML snippet initializing CKEditor5. This line just stops IDE complaining.
-const editor = window.editor;
-
-// This will store the latest saved data from VS Code
-editor.savedData = null;
-
-editor.suppressNextDataChangeEvent = false;
-
+//
+// This must run before anything that can throw: the CKEditor instance
+// (window.editor) is created asynchronously by the inline script in the
+// webview HTML. If it is not ready yet, top-level editor access below would
+// throw and kill this script — leaving window.vscode unset and every
+// toolbar button (Template, Generate, output folder) silently dead.
 // eslint-disable-next-line no-undef
 const vscode = acquireVsCodeApi();
 window.vscode = vscode;
 
 // We use this to track whether the document's initial content has been set yet
 var initializedFlag = false;
+
+// Wire up the editor-dependent parts once the CKEditor instance exists.
+function initWhenEditorReady() {
+	const editor = window.editor;
+	if (!editor) {
+		// CKEditor is still creating itself; retry shortly.
+		setTimeout(initWhenEditorReady, 25);
+		return;
+	}
+
+	// This will store the latest saved data from VS Code
+	editor.savedData = null;
+
+	editor.suppressNextDataChangeEvent = false;
 
 /**
  * Render the document in the webview.
@@ -133,6 +144,8 @@ if (state) {
 	setEditorContent(state.text);
 }
 
-vscode.postMessage({
-	type: 'initialized',
-});
+	vscode.postMessage({
+		type: 'initialized',
+	});
+}
+initWhenEditorReady();
