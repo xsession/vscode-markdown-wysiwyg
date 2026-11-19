@@ -1,0 +1,66 @@
+---
+name: Register map to TOML
+format: toml
+struct_name: demoFpgaRegs
+---
+{#-
+  register-map-to-json.j2 — register-map Markdown document to TOML.
+  Same data model as register-map-to-yaml.j2 (both register-map styles,
+  row_doc(r) / row_subrows(r)); edit struct_name per project.
+  The types are emitted as [types.<name>] tables.
+-#}
+# Regenerated from {{ source }} by register-map-to-toml.j2
+{%- for r in rows %}
+
+# @register {{ r.Name }}
+[types.{{ r.Name }}]
+{%- if r.Format == 'array' %}
+size = "calc"
+format = "array"
+bit_width = {{ r.Description | array_info.bit_width }}
+length = {{ r.Description | array_info.length }}
+{%- else %}
+size = {{ r.Size | size_bits }}
+format = "{{ r.Format }}"
+{%- endif %}
+doc = {{ r | row_doc | yaml_q }}
+flags = [
+{%- for f in r.Access | access_flags %}
+  "{{ f }}"
+{%- endfor %}
+]
+codegen = { c = { naming = "snake_case" } }
+{%- if r.Format == 'enum' %}
+
+[types.{{ r.Name }}.values]
+{%- for v in r | row_subrows %}
+  {{ v[1] }} = {{ v[0] | int }}
+{%- endfor %}
+{%- elif r.Format == 'bitfield' %}
+{%- for f in r | row_subrows %}
+{%- if f[1] == 'reserved' %}
+
+[types.{{ r.Name }}.fields.{{ r.Name }}_padding]
+size = {{ f[2] | size_bits }}
+doc = "N/A"
+{%- else %}
+
+[types.{{ r.Name }}.fields.{{ f[1] }}]
+size = {{ f[2] | size_bits }}
+doc = {{ f[4] | default('N/A') | yaml_q }}
+{%- endif %}
+{%- endfor %}
+{%- endif %}
+{%- endfor %}
+{%- if params.struct_name %}
+
+# @register {{ params.struct_name }}
+[types.{{ params.struct_name }}]
+format = "struct"
+codegen = { c = { naming = "snake_case" } }
+
+[types.{{ params.struct_name }}.fields]
+{%- for r in rows %}
+  {{ r.Name }} = "EXT__{{ r.Name }}"
+{%- endfor %}
+{%- endif %}

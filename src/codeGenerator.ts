@@ -39,6 +39,7 @@ const EXTENSIONS: { [format: string]: string } = {
 	properties: 'properties',
 	html: 'html',
 	docx: 'docx',
+	markdown: 'md',
 };
 
 /** Extension to use for a selected output format (falls back to the format name). */

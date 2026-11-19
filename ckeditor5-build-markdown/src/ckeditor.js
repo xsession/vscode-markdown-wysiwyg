@@ -179,8 +179,9 @@ MarkdownEditor.builtinPlugins = [
 			{ id: 'env', label: 'Environment (.env)' },
 			{ id: 'properties', label: 'Java properties (.properties)' },
 			{ id: 'html', label: 'HTML (.html)' },
-			{ id: 'docx', label: 'Word (.docx)' }
-		];
+			{ id: 'docx', label: 'Word (.docx)' },
+			{ id: 'markdown', label: 'Markdown (.md)' }
+			];
 
 		const state = { templates: [], template: null, templateName: null, format: null, outputFolder: null };
 		const generateButtons = [];

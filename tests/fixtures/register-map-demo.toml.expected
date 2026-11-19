@@ -1,0 +1,81 @@
+# Regenerated from demo_fpga_types.md by register-map-to-toml.j2
+
+# @register deviceId
+[types.deviceId]
+size = 32
+format = "enum"
+doc = "Unique device identifier"
+flags = [
+  "read"
+]
+codegen = { c = { naming = "snake_case" } }
+
+[types.deviceId.values]
+  Unknown = 0
+  DemoBoardA = 256
+  DemoBoardB = 257
+
+# @register controlWord
+[types.controlWord]
+size = 32
+format = "bitfield"
+doc = "Top-level control register"
+flags = [
+  "read"
+  "write"
+]
+codegen = { c = { naming = "snake_case" } }
+
+[types.controlWord.fields.enable]
+size = 1
+doc = "Master enable. 1-active."
+
+[types.controlWord.fields.mode]
+size = 2
+doc = "0: idle; 1: capture; 2: stream."
+
+[types.controlWord.fields.controlWord_padding]
+size = 29
+doc = "N/A"
+
+# @register sampleCount
+[types.sampleCount]
+size = 32
+format = "bitfield"
+doc = "Number of captured samples"
+flags = [
+  "read"
+]
+codegen = { c = { naming = "snake_case" } }
+
+[types.sampleCount.fields.count]
+size = 20
+doc = "Captured sample count."
+
+[types.sampleCount.fields.sampleCount_padding]
+size = 12
+doc = "N/A"
+
+# @register scratchArray
+[types.scratchArray]
+size = "calc"
+format = "array"
+bit_width = 32
+length = 8
+doc = "Software scratch space, 8 words."
+flags = [
+  "read"
+  "write"
+]
+codegen = { c = { naming = "snake_case" } }
+
+# @register demoFpgaRegs
+[types.demoFpgaRegs]
+format = "struct"
+codegen = { c = { naming = "snake_case" } }
+
+[types.demoFpgaRegs.fields]
+  deviceId = "EXT__deviceId"
+  controlWord = "EXT__controlWord"
+  sampleCount = "EXT__sampleCount"
+  scratchArray = "EXT__scratchArray"

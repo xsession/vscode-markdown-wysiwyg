@@ -1,0 +1,58 @@
+---
+name: Register map to XML
+format: xml
+struct_name: demoFpgaRegs
+---
+{#-
+  register-map-to-xml.j2 — register-map Markdown document to XML.
+  Same data model as register-map-to-yaml.j2 (both register-map styles,
+  row_doc(r) / row_subrows(r)); edit struct_name per project.
+-#}
+<?xml version="1.0" encoding="UTF-8"?>
+<!-- Regenerated from {{ source | xml_escape }} by register-map-to-xml.j2 -->
+<fpgaTypes>
+{%- for r in rows %}
+  <!-- @register {{ r.Name }} -->
+  <register name="{{ r.Name | xml_escape }}" format="{{ r.Format | xml_escape }}">
+{%- if r.Format == 'array' %}
+    <size>calc</size>
+    <bit_width>{{ r.Description | array_info.bit_width }}</bit_width>
+    <length>{{ r.Description | array_info.length }}</length>
+{%- else %}
+    <size>{{ r.Size | size_bits }}</size>
+{%- endif %}
+    <doc>{{ r | row_doc | xml_escape }}</doc>
+    <flags>
+{%- for f in r.Access | access_flags %}
+      <flag>{{ f | xml_escape }}</flag>
+{%- endfor %}
+    </flags>
+    <codegen c="snake_case"/>
+{%- if r.Format == 'enum' %}
+    <values>
+{%- for v in r | row_subrows %}
+      <value name="{{ v[1] | xml_escape }}">{{ v[0] | int }}</value>
+{%- endfor %}
+    </values>
+{%- elif r.Format == 'bitfield' %}
+    <fields>
+{%- for f in r | row_subrows %}
+{%- if f[1] == 'reserved' %}
+      <field name="{{ r.Name }}_padding" size="{{ f[2] | size_bits }}"><doc>N/A</doc></field>
+{%- else %}
+      <field name="{{ f[1] | xml_escape }}" size="{{ f[2] | size_bits }}"><doc>{{ f[4] | default('N/A') | xml_escape }}</doc></field>
+{%- endif %}
+{%- endfor %}
+    </fields>
+{%- endif %}
+  </register>
+{%- endfor %}
+{%- if params.struct_name %}
+  <!-- @register {{ params.struct_name }} -->
+  <struct name="{{ params.struct_name | xml_escape }}">
+{%- for r in rows %}
+    <member name="{{ r.Name | xml_escape }}" ref="EXT__{{ r.Name | xml_escape }}"/>
+{%- endfor %}
+  </struct>
+{%- endif %}
+</fpgaTypes>

@@ -1,0 +1,72 @@
+---
+name: Register map to JSON
+format: json
+struct_name: demoFpgaRegs
+---
+{#-
+  register-map-to-json.j2 — register-map Markdown document to JSON.
+  Same data model as register-map-to-yaml.j2 (both register-map styles,
+  row_doc(r) / row_subrows(r)); edit struct_name per project.
+-#}
+{
+  "types": {
+{%- for r in rows %}
+    {{ r.Name | tojson }}: {
+      "@register": {{ r.Name | tojson }},
+{%- if r.Format == 'array' %}
+      "size": "calc",
+      "format": "array",
+      "bit_width": {{ r.Description | array_info.bit_width }},
+      "length": {{ r.Description | array_info.length }},
+      "doc": {{ r | row_doc | tojson }},
+      "fpga": { "flags": {{ r.Access | access_flags | tojson }} },
+      "codegen": { "c": { "naming": "snake_case" } }
+{%- elif r.Format == 'enum' %}
+      "size": {{ r.Size | size_bits }},
+      "format": "enum",
+      "doc": {{ r | row_doc | tojson }},
+      "values": {
+{%- for v in r | row_subrows %}
+        {{ v[1] | tojson }}: {{ v[0] | int }}{{ "," if not loop.last else "" }}
+{%- endfor %}
+      },
+      "fpga": { "flags": {{ r.Access | access_flags | tojson }} },
+      "codegen": { "c": { "naming": "snake_case" } }
+{%- elif r.Format == 'bitfield' %}
+      "size": {{ r.Size | size_bits }},
+      "format": "bitfield",
+      "doc": {{ r | row_doc | tojson }},
+      "fields": {
+{%- for f in r | row_subrows %}
+{%- if f[1] == 'reserved' %}
+        {{ (r.Name + "_padding") | tojson }}: { "size": {{ f[2] | size_bits }}, "doc": "N/A" }{{ "," if not loop.last else "" }}
+{%- else %}
+        {{ f[1] | tojson }}: { "size": {{ f[2] | size_bits }}, "doc": {{ f[4] | default('N/A') | tojson }} }{{ "," if not loop.last else "" }}
+{%- endif %}
+{%- endfor %}
+      },
+      "fpga": { "flags": {{ r.Access | access_flags | tojson }} },
+      "codegen": { "c": { "naming": "snake_case" } }
+{%- else %}
+      "size": {{ r.Size | size_bits }},
+      "format": {{ r.Format | tojson }},
+      "doc": {{ r | row_doc | tojson }},
+      "fpga": { "flags": {{ r.Access | access_flags | tojson }} },
+      "codegen": { "c": { "naming": "snake_case" } }
+{%- endif %}
+    }{{ "," if (not loop.last or params.struct_name) else "" }}
+{%- endfor %}
+{%- if params.struct_name %}
+    {{ params.struct_name | tojson }}: {
+      "@register": {{ params.struct_name | tojson }},
+      "format": "struct",
+      "fields": {
+{%- for r in rows %}
+        {{ r.Name | tojson }}: {{ ("EXT__" + r.Name) | tojson }}{{ "," if not loop.last else "" }}
+{%- endfor %}
+      },
+      "codegen": { "c": { "naming": "snake_case" } }
+    }
+{%- endif %}
+  }
+}

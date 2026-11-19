@@ -1,0 +1,37 @@
+---
+name: Register map to ENV
+format: env
+---
+{#-
+  register-map-to-env.j2 — register-map Markdown document to .env.
+  Flat KEY=VALUE (dashes in names become underscores):
+    <REG>_FORMAT / _SIZE / _ACCESS per register,
+    <REG>_<FIELD>_SIZE per bitfield field,
+    <REG>_<VALUE>=<n> per enum value.
+  Docs are not emitted (env values are meant to be simple).
+-#}
+# Regenerated from {{ source }} by register-map-to-env.j2
+{%- for r in rows %}
+# @register {{ r.Name }}
+{{ r.Name | upper }}_FORMAT={{ r.Format | upper }}
+{%- if r.Format == 'array' %}
+{{ r.Name | upper }}_BIT_WIDTH={{ r.Description | array_info.bit_width }}
+{{ r.Name | upper }}_LENGTH={{ r.Description | array_info.length }}
+{%- else %}
+{{ r.Name | upper }}_SIZE={{ r.Size | size_bits }}
+{%- endif %}
+{{ r.Name | upper }}_ACCESS={{ r.Access | access_flags | join('_') | upper }}
+{%- if r.Format == 'enum' %}
+{%- for v in r | row_subrows %}
+{{ r.Name | upper }}_{{ v[1] | upper | replace('-', '_') }}={{ v[0] | int }}
+{%- endfor %}
+{%- elif r.Format == 'bitfield' %}
+{%- for f in r | row_subrows %}
+{%- if f[1] == 'reserved' %}
+{{ r.Name | upper }}_{{ (r.Name + "_padding") | upper }}_SIZE={{ f[2] | size_bits }}
+{%- else %}
+{{ r.Name | upper }}_{{ f[1] | upper }}_SIZE={{ f[2] | size_bits }}
+{%- endif %}
+{%- endfor %}
+{%- endif %}
+{%- endfor %}

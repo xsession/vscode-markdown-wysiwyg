@@ -1,0 +1,30 @@
+---
+name: Register map to CSV
+format: csv
+---
+{#-
+  register-map-to-csv.j2 — register-map Markdown document to CSV (long form,
+  RFC 4180 via csv_q). One row per field / enum value / register:
+    name, kind, item, size_bits, length, access, doc
+  kind is "field" (bitfield field), "value" (enum value) or the register's
+  own format (uint, array, ...). `length` is only set for array registers.
+-#}
+name,kind,item,size_bits,length,access,doc
+{%- for r in rows %}
+# @register {{ r.Name }}
+{%- if r.Format == 'bitfield' %}
+{%- for f in r | row_subrows %}
+{%- if f[1] == 'reserved' %}
+{{ r.Name | csv_q }},field,{{ (r.Name + "_padding") | csv_q }},{{ f[2] | size_bits }},,{{ r.Access | access_flags | join(',') | csv_q }},N/A
+{%- else %}
+{{ r.Name | csv_q }},field,{{ f[1] | csv_q }},{{ f[2] | size_bits }},,{{ r.Access | access_flags | join(',') | csv_q }},{{ f[4] | default('N/A') | csv_q }}
+{%- endif %}
+{%- endfor %}
+{%- elif r.Format == 'enum' %}
+{%- for v in r | row_subrows %}
+{{ r.Name | csv_q }},value,{{ v[1] | csv_q }},{{ v[0] | int }},,{{ r.Access | access_flags | join(',') | csv_q }},
+{%- endfor %}
+{%- else %}
+{{ r.Name | csv_q }},{{ r.Format | csv_q }},,{{ r.Size | size_bits }},{% if r.Format == 'array' %}{{ r.Description | array_info.length }}{% endif %},{{ r.Access | access_flags | join(',') | csv_q }},{{ r | row_doc | csv_q }}
+{%- endif %}
+{%- endfor %}

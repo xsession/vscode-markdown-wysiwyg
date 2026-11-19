@@ -39,6 +39,7 @@ struct_name: demoFpgaRegs
 # Regenerated from {{ source }} by register-map-to-yaml.j2
 types:
 {%- for r in rows %}
+# @register {{ r.Name }}
   {{ r.Name }}:
 {%- if r.Format == 'array' %}
     size: calc
@@ -88,6 +89,7 @@ types:
         naming: snake_case
 {%- endfor %}
 {%- if params.struct_name %}
+# @register {{ params.struct_name }}
   {{ params.struct_name }}:
     format: struct
     fields:

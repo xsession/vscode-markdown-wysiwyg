@@ -26,6 +26,8 @@
 //   filters: expr | filter | filter(args); an attribute or [index] may follow
 //     the filter result, e.g. r.Description | array_info.bit_width
 
+import { safeLoad as yamlSafeLoad } from 'js-yaml';
+
 import {
 	buildMarkdownContext,
 	sizeBits,
@@ -39,6 +41,14 @@ import {
 	unescapeMarkdownCell,
 	rowDoc,
 	rowSubRows,
+	keysOf,
+	itemsOf,
+	sizeDisplay,
+	accessDisplay,
+	fieldDisplay,
+	fieldOffset,
+	escapeMarkdownCell,
+	arraySuffix,
 	ParsedRow
 } from './markdownTables';
 
@@ -663,6 +673,16 @@ function parseIntValue(v: unknown, what: string): number {
 	return Math.trunc(n);
 }
 
+// RFC 4180: quote the field when it contains the delimiter, a quote or a
+// newline; double any embedded quotes.
+function csvQuote(s: string): string {
+	return /[",\r\n]/.test(s) ? '"' + s.replace(/"/g, '""') + '"' : s;
+}
+
+function tsvQuote(s: string): string {
+	return /[	\r\n]/.test(s) ? '"' + s.replace(/"/g, '""') + '"' : s;
+}
+
 function makeFilters(): Record<string, FilterFn> {
 	return {
 		upper: (v) => String(v ?? '').toUpperCase(),
@@ -720,6 +740,17 @@ function makeFilters(): Record<string, FilterFn> {
 		table_rows: (v) => parseTableRows(String(v ?? '')),
 		// YAML double-quoted scalar (JSON string escaping is valid YAML).
 		yaml_q: (v) => JSON.stringify(String(v ?? '')),
+		// RFC 4180 CSV field: quoted when it contains a comma, quote or newline.
+		csv_q: (v) => csvQuote(String(v ?? '')),
+		// TSV field: quoted when it contains a tab or newline.
+		tsv_q: (v) => tsvQuote(String(v ?? '')),
+		// XML text/attribute escaping (& first, then < > ").
+		xml_escape: (v) =>
+			String(v ?? '')
+				.replace(/&/g, '&amp;')
+				.replace(/</g, '&lt;')
+				.replace(/>/g, '&gt;')
+				.replace(/"/g, '&quot;'),
 		// Document-conversion helpers (see markdownTables / helpers below).
 		size_bits: (v) => sizeBits(String(v ?? '')),
 		access_flags: (v) => accessFlags(String(v ?? '')),
@@ -731,6 +762,32 @@ function makeFilters(): Record<string, FilterFn> {
 			v !== null && typeof v === 'object'
 				? rowSubRows(v as ParsedRow)
 				: parseTableRows(String(v ?? '')).slice(1),
+		// Object iteration (the 'for' statement only iterates lists).
+		keys: (v) => keysOf(v),
+		items: (v) => itemsOf(v),
+		// Parsers (null when the text doesn't parse) — backward templates.
+		yaml_parse: (v) => {
+			try {
+				return yamlSafeLoad(String(v ?? ''));
+			} catch {
+				return null;
+			}
+		},
+		json_parse: (v) => {
+			try {
+				return JSON.parse(String(v ?? ''));
+			} catch {
+				return null;
+			}
+		},
+		// Backward-template display helpers (inverse of size_bits/access_flags).
+		size_display: (v) => sizeDisplay(v),
+		access_display: (v) => accessDisplay(v),
+		field_display: (v, reg) => fieldDisplay(reg, v),
+		field_offset: (v, i) => fieldOffset(v, i),
+		esc_md: (v) => escapeMarkdownCell(String(v ?? '')),
+		// Array Description-cell suffix (inverse of array_info), '' otherwise.
+		array_suffix: (v) => arraySuffix(v),
 		array_info: (v) => arrayInfo(String(v ?? '')),
 		is_padding: (v) => isPadding(String(v ?? ''))
 	};

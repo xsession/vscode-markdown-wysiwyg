@@ -5,7 +5,13 @@ import * as vscode from 'vscode';
 import { extensionState } from './extension';
 import { generateFromTemplate, extensionForFormat, GenerationError, TemplateMapping } from './codeGenerator';
 import { renderTemplate, splitTemplateFile, TemplateError } from './jinjaTemplate';
-import { buildMarkdownContext } from './markdownTables';
+import {
+	buildMarkdownContext,
+	fingerprintsFromDocument,
+	diffFingerprints,
+	findRegisterSpan,
+	Fingerprint
+} from './markdownTables';
 
 const prettier = require('prettier');
 
@@ -79,6 +85,80 @@ export class MarkdownEditorProvider implements vscode.CustomTextEditorProvider {
 	static readonly viewType = 'markdownEditor.customEditor';
 
 	constructor(private readonly context: vscode.ExtensionContext) {}
+
+	// Live input -> output link: after a Jinja generation, editing a section
+	// in the open document re-renders the output file and scrolls the output
+	// editor to that section (see liveSync / doLiveSync).
+	private liveSessions = new Map<
+		vscode.WebviewPanel,
+		{ templatePath: string; outputAbs: string; format: string; fingerprints: Fingerprint[] }
+	>();
+	private liveSyncTimers = new Map<vscode.WebviewPanel, NodeJS.Timeout>();
+
+	// Debounced: one live re-render per burst of keystrokes per editor.
+	private liveSync(webviewPanel: vscode.WebviewPanel, document: vscode.TextDocument): void {
+		if (!this.liveSessions.has(webviewPanel)) return;
+		const pending = this.liveSyncTimers.get(webviewPanel);
+		if (pending) clearTimeout(pending);
+		this.liveSyncTimers.set(
+			webviewPanel,
+			setTimeout(() => {
+				this.liveSyncTimers.delete(webviewPanel);
+				const session = this.liveSessions.get(webviewPanel);
+				if (session) void this.doLiveSync(session, document);
+			}, 400)
+		);
+	}
+
+	private async doLiveSync(
+		session: { templatePath: string; outputAbs: string; format: string; fingerprints: Fingerprint[] },
+		document: vscode.TextDocument
+	): Promise<void> {
+		try {
+			const text = document.getText();
+			const newFingerprints = fingerprintsFromDocument(text);
+			const changed = diffFingerprints(session.fingerprints, newFingerprints);
+			if (changed === null) return; // nothing section-visible changed
+
+			// Render the template against the current document text.
+			const raw = await fs.promises.readFile(session.templatePath, 'utf8');
+			const { params, body } = splitTemplateFile(raw);
+			const context = buildMarkdownContext(text, path.basename(document.fileName));
+			context.params = params;
+			const output = renderTemplate(body, context);
+
+			// Never clobber unsaved user edits in the output file.
+			const outDoc = vscode.workspace.textDocuments.find((d) => d.uri.fsPath === session.outputAbs);
+			const skipWrite = outDoc ? outDoc.isDirty : false;
+			let shown = output;
+			if (skipWrite) {
+				try {
+					shown = await fs.promises.readFile(session.outputAbs, 'utf8');
+				} catch {
+					shown = output;
+				}
+			} else {
+				await fs.promises.mkdir(path.dirname(session.outputAbs), { recursive: true });
+				await fs.promises.writeFile(session.outputAbs, output, 'utf8');
+			}
+
+			session.fingerprints = newFingerprints;
+
+			// Scroll the output editor to the changed section and select it.
+			const span = findRegisterSpan(shown, session.format, changed);
+			if (!span) return; // section removed — the file was still updated
+			const editor = vscode.window.visibleTextEditors.find(
+				(ed) => ed.document.uri.fsPath === session.outputAbs
+			);
+			if (!editor) return;
+			const endLine = Math.min(span.end, editor.document.lineCount - 1);
+			const range = new vscode.Range(span.start, 0, endLine, 0);
+			editor.selection = new vscode.Selection(range.start, range.end);
+			editor.revealRange(range, vscode.TextEditorRevealType.InCenterIfOutsideViewport);
+		} catch (err) {
+			console.warn('Markdown Editor: live sync skipped:', err);
+		}
+	}
 
 	// Push the workspace template list into the editor's toolbar template selector.
 	private sendTemplates(webviewPanel: vscode.WebviewPanel) {
@@ -312,6 +392,10 @@ export class MarkdownEditorProvider implements vscode.CustomTextEditorProvider {
 					});
 			}
 			console.log('Disposed2');
+			const liveTimer = this.liveSyncTimers.get(webviewPanel);
+			if (liveTimer) clearTimeout(liveTimer);
+			this.liveSyncTimers.delete(webviewPanel);
+			this.liveSessions.delete(webviewPanel);
 			changeDocumentSubscription.dispose();
 			saveDocumentSubscription.dispose();
 			onDidCreateTemplates.dispose();
@@ -326,6 +410,7 @@ export class MarkdownEditorProvider implements vscode.CustomTextEditorProvider {
 			switch (e.type) {
 				case 'webviewChanged':
 					this.updateTextDocument(document, e.text);
+					this.liveSync(webviewPanel, document);
 					return;
 				case 'initialized':
 					updateWebview();
@@ -342,7 +427,7 @@ export class MarkdownEditorProvider implements vscode.CustomTextEditorProvider {
 					console.log('formatSelected', e.format);
 					return;
 				case 'generateRequest':
-					void this.handleGenerateRequest(e, document);
+					void this.handleGenerateRequest(e, document, webviewPanel);
 					return;
 				case 'pickTemplate':
 					void this.pickTemplate(webviewPanel);
@@ -361,7 +446,11 @@ export class MarkdownEditorProvider implements vscode.CustomTextEditorProvider {
 	// file, render its body against the opened Markdown document, and write
 	// the result into the output folder with the selected format's extension
 	// (or the format the template declares).
-	private async generateWithJinjaTemplate(e: any, document: vscode.TextDocument): Promise<void> {
+	private async generateWithJinjaTemplate(
+		e: any,
+		document: vscode.TextDocument,
+		webviewPanel: vscode.WebviewPanel
+	): Promise<void> {
 		const templatePath: string = e.template;
 		const format = typeof e.format === 'string' ? e.format : null;
 		const baseName = path.basename(templatePath);
@@ -417,6 +506,22 @@ export class MarkdownEditorProvider implements vscode.CustomTextEditorProvider {
 		vscode.window.showInformationMessage(
 			`Markdown Editor: generated ${rel} (${extensionForFormat(requestedFormat)})${folderNote}.`
 		);
+
+		// Start the live input -> output link: remember this generation, open
+		// the output file beside the editor, and from now on every section
+		// edit here re-renders the file and scrolls the output to that section.
+		this.liveSessions.set(webviewPanel, {
+			templatePath,
+			outputAbs: outAbs,
+			format: requestedFormat,
+			fingerprints: fingerprintsFromDocument(document.getText())
+		});
+		void Promise.resolve(
+			vscode.window.showTextDocument(vscode.Uri.file(outAbs), {
+				viewColumn: vscode.ViewColumn.Beside,
+				preserveFocus: true
+			})
+		).catch((err: unknown) => console.warn('Markdown Editor: could not open output file:', err));
 	}
 
 	// Handle the toolbar's Generate button (second toolbar row):
@@ -424,7 +529,11 @@ export class MarkdownEditorProvider implements vscode.CustomTextEditorProvider {
 	//   opened Markdown document (TypeScript backend, see jinjaTemplate.ts).
 	// - Legacy .table-template.json mappings: the structured column-mapping
 	//   generator in codeGenerator.ts.
-	private async handleGenerateRequest(e: any, document: vscode.TextDocument): Promise<void> {
+	private async handleGenerateRequest(
+		e: any,
+		document: vscode.TextDocument,
+		webviewPanel: vscode.WebviewPanel
+	): Promise<void> {
 		const templatePath = typeof e.template === 'string' ? e.template : null;
 		const format = typeof e.format === 'string' ? e.format : null;
 
@@ -436,7 +545,7 @@ export class MarkdownEditorProvider implements vscode.CustomTextEditorProvider {
 		}
 
 		if (JINJA_TEMPLATE_EXTS.has(path.extname(templatePath).toLowerCase())) {
-			await this.generateWithJinjaTemplate(e, document);
+			await this.generateWithJinjaTemplate(e, document, webviewPanel);
 			return;
 		}
 

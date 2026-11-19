@@ -1,0 +1,41 @@
+# Regenerated from demo_fpga_types.md by register-map-to-properties.j2
+# @register deviceId
+deviceId.format=enum
+deviceId.size=32
+deviceId.access=read
+deviceId.doc=Unique device identifier
+deviceId.values.Unknown=0
+deviceId.values.DemoBoardA=256
+deviceId.values.DemoBoardB=257
+# @register controlWord
+controlWord.format=bitfield
+controlWord.size=32
+controlWord.access=read,write
+controlWord.doc=Top-level control register
+controlWord.fields.enable.size=1
+controlWord.fields.enable.doc=Master enable. 1-active.
+controlWord.fields.mode.size=2
+controlWord.fields.mode.doc=0: idle; 1: capture; 2: stream.
+controlWord.fields.controlWord_padding.size=29
+controlWord.fields.controlWord_padding.doc=N/A
+# @register sampleCount
+sampleCount.format=bitfield
+sampleCount.size=32
+sampleCount.access=read
+sampleCount.doc=Number of captured samples
+sampleCount.fields.count.size=20
+sampleCount.fields.count.doc=Captured sample count.
+sampleCount.fields.sampleCount_padding.size=12
+sampleCount.fields.sampleCount_padding.doc=N/A
+# @register scratchArray
+scratchArray.format=array
+scratchArray.size=calc
+scratchArray.bit_width=32
+scratchArray.length=8
+scratchArray.access=read,write
+scratchArray.doc=Software scratch space, 8 words.
+struct=demoFpgaRegs
+demoFpgaRegs.deviceId=EXT__deviceId
+demoFpgaRegs.controlWord=EXT__controlWord
+demoFpgaRegs.sampleCount=EXT__sampleCount
+demoFpgaRegs.scratchArray=EXT__scratchArray

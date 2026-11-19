@@ -2,7 +2,7 @@ const assert = require('assert');
 const fs = require('fs');
 const path = require('path');
 const { renderTemplate, splitTemplateFile, sizeBits, accessFlags, descBase, arrayInfo, parseTableRows } = require('../out/jinjaTemplate');
-const { parseMarkdownTables, buildMarkdownContext, splitTableCells, buildRegisterRows, rowDoc, rowSubRows } = require('../out/markdownTables');
+const { parseMarkdownTables, buildMarkdownContext, splitTableCells, buildRegisterRows, rowDoc, rowSubRows, findRegisterSpan, fingerprintsFromDocument, diffFingerprints } = require('../out/markdownTables');
 
 const eq = (a, b, msg) => assert.strictEqual(a, b, msg);
 
@@ -282,5 +282,290 @@ eq(p1line('      flags: [read]').length, 7, 'pab1: read-only flags');
 eq(p1line('      testDataControl_padding:').length, 1, 'pab1: padding reconstructed');
 eq(p1line('  pab1FpgaRegs:').length, 1, 'pab1: struct from params');
 eq(p1.filter((l) => l.includes(': EXT__')).length, 12, 'pab1: struct has all 12 registers');
+
+// --------------------------------------------------------------------------- //
+// New engine filters (all-format + backward templates)
+// --------------------------------------------------------------------------- //
+eq(renderTemplate('{{ d | keys | join(",") }}', { d: { a: 1, b: 2 } }), 'a,b', 'keys()');
+eq(renderTemplate('{% for k, v in d | items %}{{ k }}={{ v }};{% endfor %}', { d: { a: 1, b: 2 } }), 'a=1;b=2;', 'items()');
+eq(renderTemplate('{{ t | size_display }}', { t: { size: 32 } }), '4 byte', 'size_display bytes');
+eq(renderTemplate('{{ t | size_display }}', { t: { size: 29 } }), '29 bit', 'size_display bits');
+eq(
+	renderTemplate('{{ t | size_display }}', { t: { format: 'array', length: 8, bit_width: 32 } }),
+	'8 x 4 byte',
+	'size_display array'
+);
+eq(renderTemplate('{{ f | access_display }}', { f: ['read', 'write'] }), 'RW', 'access_display RW');
+eq(renderTemplate('{{ f | access_display }}', { f: ['read'] }), 'R', 'access_display R');
+eq(renderTemplate('{{ f | access_display }}', { f: [] }), '—', 'access_display empty');
+eq(renderTemplate('{{ "x_padding" | field_display("x") }}'), 'reserved', 'field_display padding');
+eq(renderTemplate('{{ "enable" | field_display("x") }}'), 'enable', 'field_display plain');
+eq(renderTemplate('{{ pairs | field_offset(0) }}', { pairs: [['a', { size: 1 }], ['b', { size: 2 }]] }), 'bit 0', 'field_offset 0');
+eq(renderTemplate('{{ pairs | field_offset(1) }}', { pairs: [['a', { size: 1 }], ['b', { size: 2 }]] }), 'bit 1', 'field_offset 1');
+eq(renderTemplate('{{ pairs | field_offset(2) }}', { pairs: [['a', { size: 8 }], ['b', { size: 8 }]] }), 'byte 2', 'field_offset bytes');
+eq(renderTemplate('{{ "a,b" | csv_q }}'), '"a,b"', 'csv_q comma');
+eq(renderTemplate('{{ "plain" | csv_q }}'), 'plain', 'csv_q plain');
+eq(renderTemplate(`{{ 'a"b' | csv_q }}`), '"a""b"', 'csv_q doubled quotes');
+eq(renderTemplate('{{ "a\tb" | tsv_q }}'), '"a\tb"', 'tsv_q tab');
+eq(renderTemplate('{{ "a<b>&" | xml_escape }}'), 'a&lt;b&gt;&amp;', 'xml_escape');
+eq(renderTemplate('{{ "a|b" | esc_md }}'), 'a\\|b', 'esc_md pipe');
+eq(
+	renderTemplate('{{ t | array_suffix }}', { t: { format: 'array', length: 8, bit_width: 32 } }),
+	' — Array: 8 x u32 (4 byte elements)',
+	'array_suffix'
+);
+eq(renderTemplate('{{ t | array_suffix }}', { t: { format: 'uint' } }), '', 'array_suffix non-array');
+{
+	const y = renderTemplate('{{ "a: 1\\nb:\\n  c: 2" | yaml_parse.b.c }}', {});
+	eq(y, '2', 'yaml_parse filter');
+}
+eq(renderTemplate('{{ "{\\"x\\": 1}" | json_parse.x }}'), '1', 'json_parse filter');
+
+// --------------------------------------------------------------------------- //
+// All forward format templates: e2e against the demo document
+// --------------------------------------------------------------------------- //
+const ALL_FORMATS = ['json', 'toml', 'xml', 'csv', 'tsv', 'ini', 'env', 'properties', 'html'];
+const pctx = Object.assign({}, demoCtx);
+const rendered = {};
+for (const fmt of ALL_FORMATS) {
+	const raw = fs.readFileSync(path.join(__dirname, '..', 'templates', `register-map-to-${fmt}.j2`), 'utf8');
+	const split = splitTemplateFile(raw);
+	const ctx = Object.assign({}, pctx, { params: split.params });
+	const out = renderTemplate(split.body, ctx);
+	rendered[fmt] = out;
+	const expected = fs.readFileSync(path.join(__dirname, 'fixtures', `register-map-demo.${fmt}.expected`), 'utf8');
+	eq(out, expected, `${fmt}: demo output matches expected byte-for-byte`);
+}
+// JSON: valid JSON, marker keys present, sizes correct.
+{
+	const j = JSON.parse(rendered.json);
+	eq(j.types.deviceId.format, 'enum', 'json: deviceId format');
+	eq(j.types.deviceId.values.DemoBoardA, 256, 'json: enum value');
+	eq(j.types.controlWord.fields.enable.size, 1, 'json: field size');
+	eq(j.types.controlWord.fpga.flags.join(','), 'read,write', 'json: flags');
+	eq(j.types.demoFpgaRegs.format, 'struct', 'json: struct');
+	eq(j.types.demoFpgaRegs.fields.controlWord, 'EXT__controlWord', 'json: struct member');
+	eq(j.types.controlWord['@register'], 'controlWord', 'json: live-sync marker');
+}
+// CSV: RFC 4180 parse, every data row has 7 columns.
+{
+	const rows = parseCsv(rendered.csv).filter((r) => r.length && r[0] !== '' && !r[0].startsWith('#'));
+	eq(rows.length, 10, 'csv: header + 9 data rows');
+	for (const r of rows) eq(r.length, 7, `csv: 7 columns (${r[0]})`);
+	assert(rendered.csv.includes('"read,write"'), 'csv: multi-flag access quoted');
+}
+// TSV: 7 tab-separated columns per data row.
+{
+	const data = rendered.tsv.split('\n').filter((l) => l && !l.startsWith('#'));
+	for (const l of data) eq(l.split('\t').length, 7, `tsv: 7 columns (${l.split('\t')[0]})`);
+}
+// TOML / INI / ENV / properties: line-shape checks.
+assert(rendered.toml.includes('[types.deviceId]'), 'toml: register table');
+assert(rendered.toml.includes('DemoBoardA = 256'), 'toml: enum value');
+assert(rendered.toml.includes('# @register controlWord'), 'toml: live-sync marker');
+assert(rendered.ini.includes('[controlWord]'), 'ini: register section');
+assert(rendered.ini.includes('enable.size = 1'), 'ini: field key');
+assert(rendered.ini.includes('; @register controlWord'), 'ini: live-sync marker');
+for (const l of rendered.env.split('\n')) {
+	if (l && !l.startsWith('#')) assert(/^[A-Z0-9_]+=/.test(l), `env: KEY=VALUE (${l})`);
+}
+assert(rendered.env.includes('DEVICEID_DEMOBOARDA=256'), 'env: enum value key');
+for (const l of rendered.properties.split('\n')) {
+	if (l && !l.startsWith('#')) assert(/^[A-Za-z0-9_.]+=/.test(l), `properties: dotted key (${l})`);
+}
+assert(rendered.properties.includes('controlWord.fields.enable.size=1'), 'properties: field key');
+// XML: well-formed (stack check) + content.
+{
+	const stack = [];
+	const re = /<\/?([a-zA-Z][\w-]*)((?:\s+[\w-]+="[^"]*")*)\s*(\/?)>/g;
+	let m;
+	while ((m = re.exec(rendered.xml)) !== null) {
+		if (m[0][1] === '/') {
+			eq(stack.pop(), m[1], 'xml: matching close');
+		} else if (m[3] !== '/') {
+			stack.push(m[1]);
+		}
+	}
+	eq(stack.length, 0, 'xml: all tags closed');
+	assert(rendered.xml.includes('<register name="deviceId"'), 'xml: register element');
+	assert(rendered.xml.includes('<!-- @register controlWord -->'), 'xml: live-sync marker');
+}
+assert(rendered.html.includes('</html>'), 'html: complete document');
+assert(rendered.html.includes('<h2>controlWord'), 'html: register heading');
+
+// pab1 document through every format: key lines present.
+const pab1CtxAll = buildMarkdownContext(pab1Md, 'pab1_fpga_types.md');
+for (const fmt of ALL_FORMATS) {
+	const raw = fs.readFileSync(path.join(__dirname, '..', 'templates', `register-map-to-${fmt}.j2`), 'utf8');
+	const split = splitTemplateFile(raw);
+	const ctx = Object.assign({}, pab1CtxAll, { params: Object.assign({}, split.params, { struct_name: 'pab1FpgaRegs' }) });
+	const out = renderTemplate(split.body, ctx);
+	switch (fmt) {
+		case 'json':
+			assert(out.includes('"firmwareVersion": {'), 'pab1 json: first register');
+			eq(out.match(/"@register":/g).length, 13, 'pab1 json: 12 registers + struct markers');
+			break;
+		case 'toml':
+			assert(out.includes('[types.firmwareVersion]'), 'pab1 toml: first register');
+			assert(out.includes('[types.pab1FpgaRegs]'), 'pab1 toml: struct');
+			break;
+		case 'xml':
+			assert(out.includes('<register name="firmwareVersion"'), 'pab1 xml: first register');
+			break;
+		case 'csv': {
+			const rows = parseCsv(out).filter((r) => r.length && r[0] !== '' && !r[0].startsWith('#'));
+			for (const r of rows) eq(r.length, 7, `pab1 csv: 7 columns (${r[0]})`);
+			assert(out.includes('firmwareVersion,field,minorVersion,16,'), 'pab1 csv: field row');
+			break;
+		}
+		case 'tsv':
+			assert(out.includes('firmwareVersion\tfield\tminorVersion\t16\t\t'), 'pab1 tsv: field row');
+			break;
+		case 'ini':
+			assert(out.includes('minorVersion.size = 16'), 'pab1 ini: field key');
+			break;
+		case 'env':
+			assert(out.includes('FIRMWAREVERSION_MINORVERSION_SIZE=16'), 'pab1 env: field size');
+			assert(out.includes('HWVERSION_AC701=1'), 'pab1 env: enum value');
+			break;
+		case 'properties':
+			assert(out.includes('firmwareVersion.fields.minorVersion.size=16'), 'pab1 properties: field key');
+			break;
+		case 'html':
+			assert(out.includes('<h2>firmwareVersion'), 'pab1 html: heading');
+			break;
+	}
+}
+
+// --------------------------------------------------------------------------- //
+// Backward templates: YAML/JSON -> Markdown, and round-trip stability
+// --------------------------------------------------------------------------- //
+function renderTpl(file, md, source, extraParams) {
+	const raw = fs.readFileSync(path.join(__dirname, '..', 'templates', file), 'utf8');
+	const split = splitTemplateFile(raw);
+	const ctx = buildMarkdownContext(md, source);
+	ctx.params = Object.assign({}, split.params, extraParams || {});
+	return renderTemplate(split.body, ctx);
+}
+// YAML in -> Markdown out: register rows, docs, subtables, offsets.
+{
+	const yaml1 = renderTpl('register-map-to-yaml.j2', demoMd, 'demo_fpga_types.md', { struct_name: 'demoFpgaRegs' });
+	const md2 = renderTpl('yaml-to-register-map.j2', yaml1, 'demo_fpga_types.yml');
+	const rows2 = buildRegisterRows(md2);
+	eq(rows2.length, 4, 'backward: all 4 demo registers recovered');
+	assert.deepStrictEqual(
+		rows2.map((r) => r.Name),
+		['deviceId', 'controlWord', 'sampleCount', 'scratchArray'],
+		'backward: register order'
+	);
+	eq(rows2[1].cells[2], 'controlWord', 'backward: name cell');
+	assert(rows2[1].subrows.some((f) => f[1] === 'reserved'), 'backward: padding written as reserved');
+	// JSON in -> same Markdown out.
+	const json1 = rendered.json;
+	const md3 = renderTpl('json-to-register-map.j2', json1, 'demo_fpga_types.json');
+	eq(buildRegisterRows(md3).map((r) => r.Name).join(','), rows2.map((r) => r.Name).join(','), 'backward: JSON input matches YAML input');
+	// Round trip: md -> yaml -> md -> yaml is byte-identical (demo).
+	const yaml2 = renderTpl('register-map-to-yaml.j2', md2, 'demo_fpga_types.md', { struct_name: 'demoFpgaRegs' });
+	eq(yaml2, yaml1, 'round trip (demo): yaml stable');
+	// Round trip on the pab1-style document.
+	const p1 = renderTpl('register-map-to-yaml.j2', pab1Md, 'pab1_fpga_types.md', { struct_name: 'pab1FpgaRegs' });
+	const pm2 = renderTpl('yaml-to-register-map.j2', p1, 'pab1_fpga_types.yml');
+	const p2 = renderTpl('register-map-to-yaml.j2', pm2, 'pab1_fpga_types.md', { struct_name: 'pab1FpgaRegs' });
+	eq(p2, p1, 'round trip (pab1): yaml stable');
+	eq(buildRegisterRows(pm2).length, 12, 'round trip (pab1): all 12 registers recovered');
+}
+// A Markdown document is not a register-map data file: the template says so.
+assert(renderTpl('yaml-to-register-map.j2', demoMd, 'demo_fpga_types.md').includes('not a register map'), 'backward: no types section -> error message');
+
+// --------------------------------------------------------------------------- //
+// Live input -> output sync helpers
+// --------------------------------------------------------------------------- //
+{
+	const yaml = [
+		'types:',
+		'# @register alpha',
+		'  alpha:',
+		'    size: 32',
+		'# @register beta',
+		'  beta:',
+		'    size: 16'
+	].join('\n');
+	const spanA = findRegisterSpan(yaml, 'yaml', 'alpha');
+	eq(spanA.start, 1, 'span: marker line');
+	eq(spanA.end, 4, 'span: ends at next marker');
+	const spanB = findRegisterSpan(yaml, 'yaml', 'beta');
+	eq(spanB.end, yaml.split('\n').length, 'span: last section runs to EOF');
+	eq(findRegisterSpan(yaml, 'yaml', 'missing'), null, 'span: missing register');
+	// JSON marker style.
+	const json = ['{', '  "types": {', '    "alpha": {', '      "@register": "alpha",', '    },', '    "beta": {', '      "@register": "beta"', '    }', '  }', '}'].join('\n');
+	eq(findRegisterSpan(json, 'json', 'alpha').start, 3, 'span: json marker line');
+	eq(findRegisterSpan(json, 'json', 'alpha').end, 6, 'span: json ends at next marker');
+	// Markdown: register rows are the section starts.
+	const md = [
+		'| Offset | Word | Name |',
+		'| ------ | ---- | ---- |',
+		'| 0 | 0 | alpha |',
+		'',
+		'alpha doc',
+		'',
+		'| 4 | 1 | beta |'
+	].join('\n');
+	const mdSpan = findRegisterSpan(md, 'markdown', 'alpha');
+	eq(mdSpan.start, 2, 'span: markdown register row');
+	eq(mdSpan.end, 6, 'span: markdown ends at next register row');
+}
+{
+	const oldFp = fingerprintsFromDocument(demoMd);
+	const newFp = fingerprintsFromDocument(demoMd.replace('Unique device identifier', 'Unique device id (changed)'));
+	eq(diffFingerprints(oldFp, oldFp), null, 'diff: no change');
+	eq(diffFingerprints(oldFp, newFp), 'deviceId', 'diff: changed doc detected');
+	const added = [
+		...oldFp,
+		['gamma', JSON.stringify({ size: 32 })]
+	];
+	eq(diffFingerprints(oldFp, added), 'gamma', 'diff: added section detected');
+	const removed = oldFp.filter(([n]) => n !== 'sampleCount');
+	eq(diffFingerprints(oldFp, removed), 'sampleCount', 'diff: removed section detected');
+}
+
+// Tiny RFC 4180 CSV parser for the shape checks above.
+function parseCsv(text) {
+	const rows = [];
+	let row = [];
+	let field = '';
+	let inQuotes = false;
+	for (let i = 0; i < text.length; i++) {
+		const c = text[i];
+		if (inQuotes) {
+			if (c === '"') {
+				if (text[i + 1] === '"') {
+					field += '"';
+					i++;
+				} else {
+					inQuotes = false;
+				}
+			} else {
+				field += c;
+			}
+		} else if (c === '"') {
+			inQuotes = true;
+		} else if (c === ',') {
+			row.push(field);
+			field = '';
+		} else if (c === '\n') {
+			row.push(field);
+			rows.push(row);
+			row = [];
+			field = '';
+		} else if (c !== '\r') {
+			field += c;
+		}
+	}
+	if (field !== '' || row.length) {
+		row.push(field);
+		rows.push(row);
+	}
+	return rows;
+}
 
 console.log('Jinja template engine, markdown tables and register-map-to-yaml.j2 passed');

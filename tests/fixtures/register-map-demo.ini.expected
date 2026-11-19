@@ -1,0 +1,52 @@
+; Regenerated from demo_fpga_types.md by register-map-to-ini.j2
+
+; @register deviceId
+[deviceId]
+format = enum
+size = 32
+access = read
+doc = Unique device identifier
+Unknown = 0
+DemoBoardA = 256
+DemoBoardB = 257
+
+; @register controlWord
+[controlWord]
+format = bitfield
+size = 32
+access = read,write
+doc = Top-level control register
+enable.size = 1
+enable.doc = Master enable. 1-active.
+mode.size = 2
+mode.doc = 0: idle; 1: capture; 2: stream.
+controlWord_padding.size = 29
+controlWord_padding.doc = N/A
+
+; @register sampleCount
+[sampleCount]
+format = bitfield
+size = 32
+access = read
+doc = Number of captured samples
+count.size = 20
+count.doc = Captured sample count.
+sampleCount_padding.size = 12
+sampleCount_padding.doc = N/A
+
+; @register scratchArray
+[scratchArray]
+format = array
+size = calc
+bit_width = 32
+length = 8
+access = read,write
+doc = Software scratch space, 8 words.
+
+; @register demoFpgaRegs
+[demoFpgaRegs]
+format = struct
+deviceId = EXT__deviceId
+controlWord = EXT__controlWord
+sampleCount = EXT__sampleCount
+scratchArray = EXT__scratchArray

@@ -1,0 +1,41 @@
+---
+name: JSON to register map (Markdown)
+format: markdown
+---
+{#-
+  json-to-register-map.j2 — BACKWARD template: open a *_fpga_types.json
+  (the output of register-map-to-json.j2) and press Generate: it converts
+  the data back into a register-map Markdown document (one-line register
+  rows, prose descriptions and nested field/enum tables).
+
+  Same reconstruction assumptions as yaml-to-register-map.j2.
+-#}
+{%- if not types %}
+This document is not a register map: it needs a "types" section (YAML or JSON).
+{%- else %}
+| Offset | Word | Name | Size | Format | Access | Description |
+| ------ | ---- | --------------- | ------ | -------- | ------ | ----------- |
+{% for name, t in types | items %}
+{%- if t.format != 'struct' -%}{{ "\n" if loop.index0 > 0 else "" }}| {{ loop.index0 * 4 }} | {{ loop.index0 }} | {{ name }} | {{ t | size_display }} | {{ t.format }} | {{ t.fpga.flags | access_display }} | {{ t | array_suffix }} |
+{%- if t.doc %}
+
+{{ t.doc | esc_md }}
+{%- endif %}
+{%- if t.format == 'enum' %}
+
+| Value | Name |
+| ----- | --------- |
+{% for vname, v in t.values | items -%}
+| {{ v }} | {{ vname | esc_md }} |
+{% endfor %}
+{%- elif t.format == 'bitfield' %}
+
+| Offset | Name | Size | Type | Description |
+| ------ | --------- | ------ | ---- | ----------- |
+{% for fname, f in t.fields | items -%}
+| {{ t.fields | items | field_offset(loop.index0) }} | {{ fname | field_display(name) }} | {{ f | size_display }} | u{{ f.size }} | {{ f.doc | esc_md }} |
+{% endfor %}
+{%- endif %}
+{%- endif %}
+{%- endfor %}
+{%- endif %}

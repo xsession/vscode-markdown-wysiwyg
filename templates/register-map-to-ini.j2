@@ -1,0 +1,51 @@
+---
+name: Register map to INI
+format: ini
+struct_name: demoFpgaRegs
+---
+{#-
+  register-map-to-ini.j2 — register-map Markdown document to INI.
+  One [register] section per register; fields as <field>.size / <field>.doc
+  keys; enum values as bare keys. Same data model as the YAML template.
+-#}
+; Regenerated from {{ source }} by register-map-to-ini.j2
+{%- for r in rows %}
+
+; @register {{ r.Name }}
+[{{ r.Name }}]
+{%- if r.Format == 'array' %}
+format = array
+size = calc
+bit_width = {{ r.Description | array_info.bit_width }}
+length = {{ r.Description | array_info.length }}
+{%- else %}
+format = {{ r.Format }}
+size = {{ r.Size | size_bits }}
+{%- endif %}
+access = {{ r.Access | access_flags | join(',') }}
+doc = {{ r | row_doc }}
+{%- if r.Format == 'enum' %}
+{%- for v in r | row_subrows %}
+{{ v[1] }} = {{ v[0] | int }}
+{%- endfor %}
+{%- elif r.Format == 'bitfield' %}
+{%- for f in r | row_subrows %}
+{%- if f[1] == 'reserved' %}
+{{ r.Name }}_padding.size = {{ f[2] | size_bits }}
+{{ r.Name }}_padding.doc = N/A
+{%- else %}
+{{ f[1] }}.size = {{ f[2] | size_bits }}
+{{ f[1] }}.doc = {{ f[4] | default('N/A') }}
+{%- endif %}
+{%- endfor %}
+{%- endif %}
+{%- endfor %}
+{%- if params.struct_name %}
+
+; @register {{ params.struct_name }}
+[{{ params.struct_name }}]
+format = struct
+{%- for r in rows %}
+{{ r.Name }} = EXT__{{ r.Name }}
+{%- endfor %}
+{%- endif %}

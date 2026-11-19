@@ -1,0 +1,14 @@
+name,kind,item,size_bits,length,access,doc
+# @register deviceId
+deviceId,value,Unknown,0,,read,
+deviceId,value,DemoBoardA,256,,read,
+deviceId,value,DemoBoardB,257,,read,
+# @register controlWord
+controlWord,field,enable,1,,"read,write",Master enable. 1-active.
+controlWord,field,mode,2,,"read,write",0: idle; 1: capture; 2: stream.
+controlWord,field,controlWord_padding,29,,"read,write",N/A
+# @register sampleCount
+sampleCount,field,count,20,,read,Captured sample count.
+sampleCount,field,sampleCount_padding,12,,read,N/A
+# @register scratchArray
+scratchArray,array,,256,8,"read,write","Software scratch space, 8 words."

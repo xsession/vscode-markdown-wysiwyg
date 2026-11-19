@@ -1,0 +1,28 @@
+---
+name: Register map to TSV
+format: tsv
+---
+{#-
+  register-map-to-tsv.j2 — register-map Markdown document to TSV (long form,
+  same columns as the CSV template, tab-separated, quoted via tsv_q):
+    name, kind, item, size_bits, length, access, doc
+-#}
+name	kind	item	size_bits	length	access	doc
+{%- for r in rows %}
+# @register {{ r.Name }}
+{%- if r.Format == 'bitfield' %}
+{%- for f in r | row_subrows %}
+{%- if f[1] == 'reserved' %}
+{{ r.Name | tsv_q }}	field	{{ (r.Name + "_padding") | tsv_q }}	{{ f[2] | size_bits }}		{{ r.Access | access_flags | join(';') | tsv_q }}	N/A
+{%- else %}
+{{ r.Name | tsv_q }}	field	{{ f[1] | tsv_q }}	{{ f[2] | size_bits }}		{{ r.Access | access_flags | join(';') | tsv_q }}	{{ f[4] | default('N/A') | tsv_q }}
+{%- endif %}
+{%- endfor %}
+{%- elif r.Format == 'enum' %}
+{%- for v in r | row_subrows %}
+{{ r.Name | tsv_q }}	value	{{ v[1] | tsv_q }}	{{ v[0] | int }}		{{ r.Access | access_flags | join(';') | tsv_q }}	{{ '' }}
+{%- endfor %}
+{%- else %}
+{{ r.Name | tsv_q }}	{{ r.Format | tsv_q }}		{{ r.Size | size_bits }}	{% if r.Format == 'array' %}{{ r.Description | array_info.length }}{% endif %}	{{ r.Access | access_flags | join(';') | tsv_q }}	{{ r | row_doc | tsv_q }}
+{%- endif %}
+{%- endfor %}

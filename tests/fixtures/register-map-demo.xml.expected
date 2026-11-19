@@ -1,0 +1,65 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!-- Regenerated from demo_fpga_types.md by register-map-to-xml.j2 -->
+<fpgaTypes>
+  <!-- @register deviceId -->
+  <register name="deviceId" format="enum">
+    <size>32</size>
+    <doc>Unique device identifier</doc>
+    <flags>
+      <flag>read</flag>
+    </flags>
+    <codegen c="snake_case"/>
+    <values>
+      <value name="Unknown">0</value>
+      <value name="DemoBoardA">256</value>
+      <value name="DemoBoardB">257</value>
+    </values>
+  </register>
+  <!-- @register controlWord -->
+  <register name="controlWord" format="bitfield">
+    <size>32</size>
+    <doc>Top-level control register</doc>
+    <flags>
+      <flag>read</flag>
+      <flag>write</flag>
+    </flags>
+    <codegen c="snake_case"/>
+    <fields>
+      <field name="enable" size="1"><doc>Master enable. 1-active.</doc></field>
+      <field name="mode" size="2"><doc>0: idle; 1: capture; 2: stream.</doc></field>
+      <field name="controlWord_padding" size="29"><doc>N/A</doc></field>
+    </fields>
+  </register>
+  <!-- @register sampleCount -->
+  <register name="sampleCount" format="bitfield">
+    <size>32</size>
+    <doc>Number of captured samples</doc>
+    <flags>
+      <flag>read</flag>
+    </flags>
+    <codegen c="snake_case"/>
+    <fields>
+      <field name="count" size="20"><doc>Captured sample count.</doc></field>
+      <field name="sampleCount_padding" size="12"><doc>N/A</doc></field>
+    </fields>
+  </register>
+  <!-- @register scratchArray -->
+  <register name="scratchArray" format="array">
+    <size>calc</size>
+    <bit_width>32</bit_width>
+    <length>8</length>
+    <doc>Software scratch space, 8 words.</doc>
+    <flags>
+      <flag>read</flag>
+      <flag>write</flag>
+    </flags>
+    <codegen c="snake_case"/>
+  </register>
+  <!-- @register demoFpgaRegs -->
+  <struct name="demoFpgaRegs">
+    <member name="deviceId" ref="EXT__deviceId"/>
+    <member name="controlWord" ref="EXT__controlWord"/>
+    <member name="sampleCount" ref="EXT__sampleCount"/>
+    <member name="scratchArray" ref="EXT__scratchArray"/>
+  </struct>
+</fpgaTypes>

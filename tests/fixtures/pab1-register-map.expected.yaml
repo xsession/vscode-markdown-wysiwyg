@@ -1,5 +1,6 @@
 # Regenerated from pab1_fpga_types.md by register-map-to-yaml.j2
 types:
+# @register firmwareVersion
   firmwareVersion:
     size: 32
     format: bitfield
@@ -16,6 +17,7 @@ types:
     codegen:
       c:
         naming: snake_case
+# @register hwVersion
   hwVersion:
     size: 32
     format: enum
@@ -30,6 +32,7 @@ types:
     codegen:
       c:
         naming: snake_case
+# @register pciExpressType
   pciExpressType:
     size: 32
     format: bitfield
@@ -46,6 +49,7 @@ types:
     codegen:
       c:
         naming: snake_case
+# @register pcieEngine
   pcieEngine:
     size: 32
     format: enum
@@ -58,6 +62,7 @@ types:
     codegen:
       c:
         naming: snake_case
+# @register dataChannelInterface
   dataChannelInterface:
     size: 32
     format: enum
@@ -71,6 +76,7 @@ types:
     codegen:
       c:
         naming: snake_case
+# @register numOfDataChannels
   numOfDataChannels:
     size: 32
     format: bitfield
@@ -87,6 +93,7 @@ types:
     codegen:
       c:
         naming: snake_case
+# @register c2hStreamBufferStatus
   c2hStreamBufferStatus:
     size: 32
     format: bitfield
@@ -103,6 +110,7 @@ types:
     codegen:
       c:
         naming: snake_case
+# @register testDataControl
   testDataControl:
     size: 32
     format: bitfield
@@ -119,6 +127,7 @@ types:
     codegen:
       c:
         naming: snake_case
+# @register blockSize
   blockSize:
     size: 32
     format: uint
@@ -128,6 +137,7 @@ types:
     codegen:
       c:
         naming: snake_case
+# @register bandwidthControl
   bandwidthControl:
     size: 32
     format: bitfield
@@ -144,6 +154,7 @@ types:
     codegen:
       c:
         naming: snake_case
+# @register acqControl
   acqControl:
     size: 32
     format: bitfield
@@ -160,6 +171,7 @@ types:
     codegen:
       c:
         naming: snake_case
+# @register streamBufferSize
   streamBufferSize:
     size: 32
     format: bitfield
@@ -176,6 +188,7 @@ types:
     codegen:
       c:
         naming: snake_case
+# @register pab1FpgaRegs
   pab1FpgaRegs:
     format: struct
     fields:

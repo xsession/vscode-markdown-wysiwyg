@@ -1,0 +1,48 @@
+---
+name: Register map to Properties
+format: properties
+struct_name: demoFpgaRegs
+---
+{#-
+  register-map-to-properties.j2 — register-map Markdown document to
+  Java .properties. Dotted keys:
+    <reg>.format / .size / .access / .doc
+    <reg>.fields.<f>.size / .doc   (bitfields)
+    <reg>.values.<v>=<n>           (enums)
+-#}
+# Regenerated from {{ source }} by register-map-to-properties.j2
+{%- for r in rows %}
+# @register {{ r.Name }}
+{%- if r.Format == 'array' %}
+{{ r.Name }}.format=array
+{{ r.Name }}.size=calc
+{{ r.Name }}.bit_width={{ r.Description | array_info.bit_width }}
+{{ r.Name }}.length={{ r.Description | array_info.length }}
+{%- else %}
+{{ r.Name }}.format={{ r.Format }}
+{{ r.Name }}.size={{ r.Size | size_bits }}
+{%- endif %}
+{{ r.Name }}.access={{ r.Access | access_flags | join(',') }}
+{{ r.Name }}.doc={{ r | row_doc }}
+{%- if r.Format == 'enum' %}
+{%- for v in r | row_subrows %}
+{{ r.Name }}.values.{{ v[1] }}={{ v[0] | int }}
+{%- endfor %}
+{%- elif r.Format == 'bitfield' %}
+{%- for f in r | row_subrows %}
+{%- if f[1] == 'reserved' %}
+{{ r.Name }}.fields.{{ r.Name }}_padding.size={{ f[2] | size_bits }}
+{{ r.Name }}.fields.{{ r.Name }}_padding.doc=N/A
+{%- else %}
+{{ r.Name }}.fields.{{ f[1] }}.size={{ f[2] | size_bits }}
+{{ r.Name }}.fields.{{ f[1] }}.doc={{ f[4] | default('N/A') }}
+{%- endif %}
+{%- endfor %}
+{%- endif %}
+{%- endfor %}
+{%- if params.struct_name %}
+struct={{ params.struct_name }}
+{%- for r in rows %}
+{{ params.struct_name }}.{{ r.Name }}=EXT__{{ r.Name }}
+{%- endfor %}
+{%- endif %}
