@@ -623,11 +623,11 @@ export class MarkdownEditorProvider implements vscode.CustomTextEditorProvider {
 					<title>Markdown WYSIWYG Editor</title>
 				</head>
 				<body>
-					<div id="editor"></div>
+					<div id="mdwysiwyg-root"></div>
 
 					<script nonce="${nonce}" src="${ckeditorUri}"></script>
 					<script nonce="${nonce}">
-						MarkdownEditor.create(document.querySelector('#editor'))
+						MarkdownEditor.create(document.querySelector('#mdwysiwyg-root'))
 							.then((editor) => {
 								window.editor = editor;
 								editor.timeLastModified = new Date();

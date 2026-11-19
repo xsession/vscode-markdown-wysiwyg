@@ -19,7 +19,9 @@ var initializedFlag = false;
 // Wire up the editor-dependent parts once the CKEditor instance exists.
 function initWhenEditorReady() {
 	const editor = window.editor;
-	if (!editor) {
+	// A <div id="editor"> would also create a live window.editor property
+	// (named element lookup) — only the real CKEditor instance has a model.
+	if (!editor || !editor.model) {
 		// CKEditor is still creating itself; retry shortly.
 		setTimeout(initWhenEditorReady, 25);
 		return;
