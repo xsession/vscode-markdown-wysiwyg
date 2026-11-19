@@ -192,7 +192,23 @@ MarkdownEditor.builtinPlugins = [
 		const postMessage = (message) => {
 			if (window.vscode) {
 				window.vscode.postMessage(message);
+				return true;
 			}
+			// The init script (markdownEditorInitScript.js) sets window.vscode
+			// before anything else; if it is missing here, the webview bridge
+			// never came up and every toolbar button is silently dead. Make it
+			// visible instead: console + button tooltip.
+			console.error(
+				'Markdown toolbar: window.vscode is missing — the webview bridge did not initialize. ' +
+					'Reload the editor tab or run "Developer: Reload Window". Message: ' +
+					JSON.stringify(message)
+			);
+			for (const buttonView of templateButtons) {
+				buttonView.tooltip =
+					'Template (bridge offline — the webview did not initialize. ' +
+					'Reopen this tab or run "Developer: Reload Window")';
+			}
+			return false;
 		};
 
 		const formatById = (id) => OUTPUT_FORMATS.find((format) => format.id === id) || null;

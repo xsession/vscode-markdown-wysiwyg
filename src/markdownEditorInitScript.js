@@ -11,6 +11,7 @@
 // eslint-disable-next-line no-undef
 const vscode = acquireVsCodeApi();
 window.vscode = vscode;
+console.log('[markdown-editor] init script loaded — window.vscode ready');
 
 // We use this to track whether the document's initial content has been set yet
 var initializedFlag = false;
@@ -23,6 +24,16 @@ function initWhenEditorReady() {
 		setTimeout(initWhenEditorReady, 25);
 		return;
 	}
+	try {
+		initEditor(editor);
+	} catch (err) {
+		// Never die silently: a throw here used to leave every toolbar
+		// button dead with no trace in the UI.
+		console.error('[markdown-editor] init failed — toolbar buttons will not work:', err);
+	}
+}
+
+function initEditor(editor) {
 
 	// This will store the latest saved data from VS Code
 	editor.savedData = null;
