@@ -1,5 +1,7 @@
 const fs=require('fs'),path=require('path'),crypto=require('crypto');
-const root=path.resolve(__dirname,'../resources/ai'),sources=JSON.parse(fs.readFileSync(path.join(root,'../ai-sources.json'),'utf8')),manifest=JSON.parse(fs.readFileSync(path.join(root,'manifest.json'),'utf8'));
+const root=path.resolve(__dirname,'../resources/ai'),sourcesFile=path.join(root,'../ai-sources.json');
+if(!fs.existsSync(sourcesFile)){console.log('Local AI sources not present (selfserve AI removed) — skipping local AI verification.');process.exit(0);}
+const sources=JSON.parse(fs.readFileSync(sourcesFile,'utf8')),manifest=JSON.parse(fs.readFileSync(path.join(root,'manifest.json'),'utf8'));
 if(manifest.model.sha256!==sources.model.sha256||manifest.release!==sources.release)throw Error('Local AI bundle is from another release. Run npm run ai:bundle.');
 for(const [relative,hash] of Object.entries(manifest.files)){
  const file=path.resolve(root,relative);if(!file.startsWith(root+path.sep))throw Error('Unsafe AI manifest path');

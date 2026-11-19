@@ -23,7 +23,11 @@ def download(url,path,expected=None):
             if attempt==2:raise
             time.sleep(2)
 def main():
-    config=json.loads((ROOT/'resources/ai-sources.json').read_text())
+    sources=ROOT/'resources/ai-sources.json'
+    if not sources.is_file():
+        print('Local AI sources not present (selfserve AI removed) — nothing to bundle.')
+        return
+    config=json.loads(sources.read_text())
     AI.mkdir(parents=True,exist_ok=True)
     with tempfile.TemporaryDirectory(prefix='bundle-local-ai-') as tmp:
         work=Path(tmp)
