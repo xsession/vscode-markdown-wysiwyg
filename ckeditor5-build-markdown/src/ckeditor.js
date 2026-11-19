@@ -37,6 +37,7 @@ import Underline from '@ckeditor/ckeditor5-basic-styles/src/underline';
 import { ButtonView, Model, createDropdown, addListToDropdown } from '@ckeditor/ckeditor5-ui';
 import { Collection } from '@ckeditor/ckeditor5-utils';
 
+import './nestedTableMarkdown';
 import './styles.css';
 // import './github-markdown.css';
 
@@ -340,6 +341,7 @@ MarkdownEditor.builtinPlugins = [
 		// Document action buttons: they ask the extension host to run the
 		// matching VS Code command on the document this editor shows.
 		const commandButtons = [
+			{ name: 'createJinjaTemplate', command: 'markdownEditor.createJinjaTemplate', label: 'Create Jinja template from examples', icon: CREATE_TEMPLATE_ICON },
 			{ name: 'mindmap', command: 'markdownEditor.documentation.mindmap', label: 'Documentation mind map', icon: MINDMAP_ICON },
 			{ name: 'readAloud', command: 'markdownEditor.readAloud', label: 'Read document aloud', icon: SPEAKER_ICON },
 			{ name: 'openDocument', command: 'markdownEditor.documentation.open', label: 'Open document in documentation view', icon: OPEN_DOCUMENT_ICON },
@@ -362,6 +364,8 @@ const GENERATOR_ICON =
 	'<svg viewBox="0 0 20 20" xmlns="http://www.w3.org/2000/svg"><path d="M1.5 2a1 1 0 0 1 1-1h6.086a1.5 1.5 0 0 1 1.06.44l2.414 2.414A1.5 1.5 0 0 1 13.5 5.914V18a1 1 0 0 1-1 1h-10a1 1 0 0 1-1-1V2zm1 .906V18h9V6.086L9.086 2.906H2.5z"/><path d="m12.3 8.7 4.2 3.3-4.2 3.3-.9-1.1 2.5-2.2-2.5-2.2.9-1.1z"/></svg>';
 const TEMPLATE_ICON =
 	'<svg viewBox="0 0 20 20" xmlns="http://www.w3.org/2000/svg"><path d="M11 1H3a1 1 0 0 0-1 1v16a1 1 0 0 0 1 1h14a1 1 0 0 0 1-1V7l-7-6z" opacity=".4"/><path d="M11 1v6h6l-6-6z"/><path d="M5 10.5h10V12H5v-1.5zm0 3.3h10v1.5H5v-1.5zM5 17.1h6V18.6H5v-1.5z"/></svg>';
+const CREATE_TEMPLATE_ICON =
+	'<svg viewBox="0 0 20 20" xmlns="http://www.w3.org/2000/svg"><path d="M3 2h8l4 4v3h-1.5V7H10V3.5H4.5v13H9V18H3z"/><path d="M13 10h1.5v3.25h3.25v1.5H14.5V18H13v-3.25H9.75v-1.5H13z"/></svg>';
 const FORMAT_ICON =
 	'<svg viewBox="0 0 20 20" xmlns="http://www.w3.org/2000/svg"><path d="M10 1l4.5 4.5H12.5V10h-5V5.5H5.5L10 1z" opacity=".55"/><path d="M2 12.5h16V14H2v-1.5zm0 3.2h16v3.3H2v-3.3z"/></svg>';
 const OUTPUT_FOLDER_ICON =
@@ -403,6 +407,7 @@ MarkdownEditor.defaultConfig = {
 			'generateCode',
 			'|',
 			'templateSelector',
+			'createJinjaTemplate',
 			'outputFormat',
 			'pickOutputFolder',
 			'|',

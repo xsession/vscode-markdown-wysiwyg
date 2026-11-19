@@ -104,7 +104,8 @@ export function descBase(s: string): string {
 	for (const c of [br, tbl, arr]) {
 		if (c !== -1) cut = Math.min(cut, c);
 	}
-	return unescapeMarkdownCell(s.slice(0, cut)).trim();
+	const description = s.slice(0, cut);
+	return unescapeMarkdownCell(tbl === -1 ? description : description.replace(/<\/?p(?:\s[^>]*)?>/gi, '')).trim();
 }
 
 // "Array: 8 x u32 (4 byte elements)" -> { length: 8, bit_width: 32 } | null.
@@ -240,7 +241,18 @@ function findTableRuns(lines: string[]): TableRun[] {
 	return runs;
 }
 
+export interface RegisterRowLocation {
+	row: ParsedRow;
+	line: number;
+	end: number;
+	sub?: TableRun;
+}
+
 export function buildRegisterRows(markdown: string): ParsedRow[] {
+	return locateRegisterRows(markdown).map(entry => entry.row);
+}
+
+export function locateRegisterRows(markdown: string): RegisterRowLocation[] {
 	const lines = markdown.split(/\r?\n/);
 	const runs = findTableRuns(lines);
 	const main = runs[0];
@@ -266,7 +278,7 @@ export function buildRegisterRows(markdown: string): ParsedRow[] {
 	}
 	rowLineIdx.sort((a, b) => a - b);
 
-	const rows: ParsedRow[] = [];
+	const rows: RegisterRowLocation[] = [];
 	rowLineIdx.forEach((k, n) => {
 		const cells = splitTableCells(lines[k]);
 		const row: ParsedRow = { cells };
@@ -292,7 +304,7 @@ export function buildRegisterRows(markdown: string): ParsedRow[] {
 				row.subrows.push(splitTableCells(lines[j]));
 			}
 		}
-		rows.push(row);
+		rows.push({ row, line: k, end, sub });
 	});
 	return rows;
 }

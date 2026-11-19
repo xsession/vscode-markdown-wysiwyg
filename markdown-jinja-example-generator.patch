@@ -1,0 +1,2041 @@
+diff --git a/JINJA-TEMPLATES.md b/JINJA-TEMPLATES.md
+index 7d0096ea31ccf6b1d1a23a06bb785ab818a9e5c2..85efefaf2a52b6f9431735df9948dac695e94b7e 100644
+--- a/JINJA-TEMPLATES.md
++++ b/JINJA-TEMPLATES.md
+@@ -15,6 +15,28 @@ Generate button ──▶ TypeScript renderer (src/jinjaTemplate.ts)
+                   output  ──▶ <output folder>/<name>.<ext>
+ ```
+ 
++## Create a template from examples
++
++Click **Create Jinja template from examples** in the editor toolbar or run
++**Markdown Editor: Create Jinja Template from Examples** in the Command
++Palette. Select the source example, select the expected output example, then
++choose where to save the `.j2` template. The extension renders the inferred
++template with your source and checks that it reproduces the expected text
++before opening the save dialog.
++
++The generator matches source values to the expected text. It recognizes
++Markdown headings and table cells, plus fields in JSON and YAML inputs. Two
++or more matching records can produce a row loop. Use different values across
++rows to distinguish columns, and check the result with a second example
++before relying on it for a different document. Content with no identifiable
++source match stays literal. Add calculated transformations or reverse sync
++rules by editing the generated template.
++
++If you create the template from the Markdown file open in the toolbar, the
++editor selects the new template automatically. Choose an output folder and
++press **Generate** to run it. The example's filename supplies the default
++output name.
++
+ ## Template file format
+ 
+ An optional YAML front matter, then the Jinja body:
+@@ -193,9 +215,24 @@ documents stay linked for that editor session:
+    the output editor to the section and selects it** — you see the effect of
+    your edit exactly where it landed.
+ 
+-If the output file has unsaved user edits the rewrite is skipped (the reveal
+-still happens, against the on-disk content) so manual edits are never
+-clobbered. `docx` has no live sync (binary format, no template output).
++Saving YAML or JSON generated with the bundled register-map templates sends
++supported edits back to the original Markdown. It updates existing register
++cells and field/enum tables while keeping the register offsets and surrounding
++document. Add, remove, or rename registers in Markdown, where their offsets
++are defined. Output-only metadata such as code generation settings has no
++Markdown counterpart.
++
++The link survives closing the Markdown tab for the current VS Code window.
++If both sides changed, the extension keeps both files and reports the conflict.
++An invalid output is left in place for correction. Generate again to establish
++a link after restarting VS Code. Generate is an explicit Markdown-to-output
++operation and can replace the destination.
++
++Custom templates can opt into reverse sync with `reverse: relative/path.j2`
++in the forward template's front matter. That template receives the edited
++output as `markdown`, the original source as `original_markdown`, and the
++last synchronized output as `previous_output`. Its result replaces the source
++Markdown, so it should include any source content that must be preserved.
+ 
+ ## Writing a new template
+ 
+diff --git a/TEMPLATE-SYNC.md b/TEMPLATE-SYNC.md
+index 374700e876e174496a291286f5c0cb9d12eda329..688efda980d57896dba020a37d54a1bc8cc60f21 100644
+--- a/TEMPLATE-SYNC.md
++++ b/TEMPLATE-SYNC.md
+@@ -8,20 +8,14 @@ Generate editable files from a Markdown table and synchronize saved edits back t
+ 
+ ## Start
+ 
+-1. Open your project folder in VS Code and trust it.
+-2. Run **Markdown Editor: Create table template (10 formats)** and select a format.
+-3. Save the `.table-template.json` file. It defines the source Markdown, destination path, field names and types. An example `devices.md` is created alongside it unless that file already exists.
+-4. Edit the template to match your project and save all relevant buffers.
+-5. Run **Generate output from Markdown (10 formats)** and choose the template. This explicitly chooses Markdown as the source, including when the output already exists.
+-6. Edit and save either file. The other updates automatically while the extension is active. Use **Import output into Markdown (10 formats)** to explicitly choose the generated file as the source. **Synchronize template table** chooses automatically when a baseline is available.
+-
+-A sync button appears in supported editor titles. Templates without `format` continue to infer their format from the output extension; existing YAML templates keep working. `.yml`, `.htm`, `.env` and `.env.local` are recognized. An explicit `format` also supports custom extensions such as `board.cfg`.
+-
+-Paths are relative to the template file. Absolute paths and `../` are supported for custom destinations. Parent folders are created. Workspace output files are watched for external edits. An output outside the workspace synchronizes when saved in this VS Code window or using the manual command.
++1. Open the source Markdown in the WYSIWYG editor.
++2. Choose the `.table-template.json` mapping with **Template**, then click **Generate**.
++3. Open the generated file at the mapping's path or the toolbar's selected destination. Edit it and save. The extension imports the mapped values into the Markdown file named in the mapping. Unmapped columns in Markdown stay with their existing row IDs when a key is configured.
++4. If Markdown and the destination have both changed, compare the files before generating again. The reverse link lasts for the current VS Code window, including when the source tab is closed.
+ 
+ ## Included formats and examples
+ 
+-Each example directory contains a Markdown source, template, and actual generated output. Because the example outputs already exist, run Generate or Import once to establish the source direction.
++The table shows the layout expected for generated outputs and reverse import. Generate establishes the link used to import future saves.
+ 
+ | Format | Example directory | Managed structure | Preservation |
+ | --- | --- | --- | --- |
+@@ -90,10 +84,10 @@ Only the marked table changes in Markdown. Unmapped Markdown columns survive for
+ 
+ ## Conflicts and recovery
+ 
+-A baseline is persisted per workspace/template. If both files change, synchronization stops. Compare the files, then explicitly choose Generate or Import to select which side wins. These commands intentionally replace managed values on the other side. Existing output without a baseline, or any changed template, requires the same choice. Save the source, destination and template before sync; dirty buffers prevent writes. Watcher bursts are batched and sync operations run in order.
++Each Generate establishes a baseline for the selected output in the current VS Code window. A dirty or independently changed Markdown source pauses reverse sync. Watcher bursts are batched and operations for the same file run in order. Generate explicitly chooses Markdown as the source and rewrites the destination.
+ 
+-Use one owner per output and marked table to avoid competing mappings. File deletion is not imported as row deletion. For deletion of all records, retain a valid empty table/list in the output. Validation failures stop writes. Workspace trust is required and templates execute no scripts. The operation is not a distributed filesystem transaction; keep source control for recovery when other applications edit the same files concurrently.
++Use one owner per output and marked table to avoid competing mappings. File deletion is not imported as row deletion. For deletion of all records, retain a valid empty table/list in the output. Validation failures stop writes.  The operation is not a distributed filesystem transaction; keep source control for recovery when other applications edit the same files concurrently.
+ 
+ ## Build and verification
+ 
+-Run `build.bat` to build with the existing offline asset workflow. Tests cover all ten adapters, actual output text edits, multiline and escaped values, Unicode, extra-field retention, row add/delete/reorder, automatic save and watcher events, persisted baselines, conflict refusal, workspace trust and dirty buffers. Tests run on Linux with VS Code API fixtures; native Windows/VS Code GUI execution remains unverified.
++Run `build.bat` to build with the existing offline asset workflow. Tests cover all ten adapters, edited output values, escaped pipes, row identity, automatic save handling, file watcher conflicts and both register-map layouts. Tests run on Linux with VS Code API fixtures; native Windows/VS Code GUI execution remains unverified.
+diff --git a/ckeditor5-build-markdown/src/ckeditor.js b/ckeditor5-build-markdown/src/ckeditor.js
+index a503aacbcdf5339e71d51d5e93f473102cdb22fe..d14c69d8f2b2d2a07d90a59e9088413e089ed453 100644
+--- a/ckeditor5-build-markdown/src/ckeditor.js
++++ b/ckeditor5-build-markdown/src/ckeditor.js
+@@ -37,6 +37,7 @@ import Underline from '@ckeditor/ckeditor5-basic-styles/src/underline';
+ import { ButtonView, Model, createDropdown, addListToDropdown } from '@ckeditor/ckeditor5-ui';
+ import { Collection } from '@ckeditor/ckeditor5-utils';
+ 
++import './nestedTableMarkdown';
+ import './styles.css';
+ // import './github-markdown.css';
+ 
+@@ -340,6 +341,7 @@ MarkdownEditor.builtinPlugins = [
+ 		// Document action buttons: they ask the extension host to run the
+ 		// matching VS Code command on the document this editor shows.
+ 		const commandButtons = [
++			{ name: 'createJinjaTemplate', command: 'markdownEditor.createJinjaTemplate', label: 'Create Jinja template from examples', icon: CREATE_TEMPLATE_ICON },
+ 			{ name: 'mindmap', command: 'markdownEditor.documentation.mindmap', label: 'Documentation mind map', icon: MINDMAP_ICON },
+ 			{ name: 'readAloud', command: 'markdownEditor.readAloud', label: 'Read document aloud', icon: SPEAKER_ICON },
+ 			{ name: 'openDocument', command: 'markdownEditor.documentation.open', label: 'Open document in documentation view', icon: OPEN_DOCUMENT_ICON },
+@@ -362,6 +364,8 @@ const GENERATOR_ICON =
+ 	'<svg viewBox="0 0 20 20" xmlns="http://www.w3.org/2000/svg"><path d="M1.5 2a1 1 0 0 1 1-1h6.086a1.5 1.5 0 0 1 1.06.44l2.414 2.414A1.5 1.5 0 0 1 13.5 5.914V18a1 1 0 0 1-1 1h-10a1 1 0 0 1-1-1V2zm1 .906V18h9V6.086L9.086 2.906H2.5z"/><path d="m12.3 8.7 4.2 3.3-4.2 3.3-.9-1.1 2.5-2.2-2.5-2.2.9-1.1z"/></svg>';
+ const TEMPLATE_ICON =
+ 	'<svg viewBox="0 0 20 20" xmlns="http://www.w3.org/2000/svg"><path d="M11 1H3a1 1 0 0 0-1 1v16a1 1 0 0 0 1 1h14a1 1 0 0 0 1-1V7l-7-6z" opacity=".4"/><path d="M11 1v6h6l-6-6z"/><path d="M5 10.5h10V12H5v-1.5zm0 3.3h10v1.5H5v-1.5zM5 17.1h6V18.6H5v-1.5z"/></svg>';
++const CREATE_TEMPLATE_ICON =
++	'<svg viewBox="0 0 20 20" xmlns="http://www.w3.org/2000/svg"><path d="M3 2h8l4 4v3h-1.5V7H10V3.5H4.5v13H9V18H3z"/><path d="M13 10h1.5v3.25h3.25v1.5H14.5V18H13v-3.25H9.75v-1.5H13z"/></svg>';
+ const FORMAT_ICON =
+ 	'<svg viewBox="0 0 20 20" xmlns="http://www.w3.org/2000/svg"><path d="M10 1l4.5 4.5H12.5V10h-5V5.5H5.5L10 1z" opacity=".55"/><path d="M2 12.5h16V14H2v-1.5zm0 3.2h16v3.3H2v-3.3z"/></svg>';
+ const OUTPUT_FOLDER_ICON =
+@@ -403,6 +407,7 @@ MarkdownEditor.defaultConfig = {
+ 			'generateCode',
+ 			'|',
+ 			'templateSelector',
++			'createJinjaTemplate',
+ 			'outputFormat',
+ 			'pickOutputFolder',
+ 			'|',
+diff --git a/ckeditor5-build-markdown/src/nestedTableMarkdown.js b/ckeditor5-build-markdown/src/nestedTableMarkdown.js
+new file mode 100644
+index 0000000000000000000000000000000000000000..762fd498abe495cc12201bd1248a1f3a69b5dea2
+--- /dev/null
++++ b/ckeditor5-build-markdown/src/nestedTableMarkdown.js
+@@ -0,0 +1,46 @@
++import { turndownService } from '@ckeditor/ckeditor5-markdown-gfm/src/html2markdown/html2markdown';
++
++// A GFM pipe-table row cannot contain literal line breaks or pipes inside its
++// cells. Write nested cells as inline HTML, preserving the table structure,
++// surrounding paragraphs, and formatting instead of converting to pipe rows.
++turndownService.addRule('nestedTableCell', {
++	filter: (node) => node.matches('td, th') && Boolean(node.querySelector('table')),
++	replacement: (_content, cell) => {
++		const prefix = cell.previousElementSibling ? ' ' : '| ';
++		return prefix + serializeChildren(cell) + ' |';
++	},
++});
++
++// Turndown checks for blank nodes before custom rules. CKEditor's figure
++// wrapper may contain a real table even when every cell is still empty.
++const blankRule = turndownService.rules.blankRule;
++const defaultBlankReplacement = blankRule.replacement;
++blankRule.replacement = (content, node, options) => {
++	if (node.matches('figure.table') && node.querySelector('table')) {
++		return '\n\n' + serializeNode(node) + '\n\n';
++	}
++	return defaultBlankReplacement(content, node, options);
++};
++
++function serializeChildren(element) {
++	return Array.from(element.childNodes, serializeNode).join('');
++}
++
++function serializeNode(node) {
++	if (node.nodeType === Node.TEXT_NODE) {
++		// Prevent Markdown from reinterpreting text inside the inline HTML.
++		return node.data.replace(/[&<>|\r\n\\`*_~\[\]]/g, (char) => '&#' + char.charCodeAt(0) + ';');
++	}
++	if (node.nodeType !== Node.ELEMENT_NODE) return '';
++
++	// CKEditor's wrapper is unnecessary in data. A bare HTML table also
++	// matches the format used in existing register-map Description cells.
++	if (node.matches('figure.table') && node.childNodes.length === 1 && node.firstChild.matches?.('table')) {
++		return serializeNode(node.firstChild);
++	}
++
++	const shell = node.cloneNode(false).outerHTML.replace(/[|\r\n]/g, (char) => '&#' + char.charCodeAt(0) + ';');
++	const closingTag = shell.lastIndexOf('</');
++	if (closingTag < 0) return shell;
++	return shell.slice(0, closingTag) + serializeChildren(node) + shell.slice(closingTag);
++}
+diff --git a/package.json b/package.json
+index 22eed77c4c3bafae9c534036fe3d8850a1a9463c..80902e8e28990240a59ca3fcbd9eb3ce1d3258f2 100644
+--- a/package.json
++++ b/package.json
+@@ -26,6 +26,7 @@
+   "activationEvents": [
+     "onCustomEditor:markdownEditor.customEditor",
+     "onCommand:markdownEditor.openCustomEditor",
++    "onCommand:markdownEditor.createJinjaTemplate",
+     "onCommand:markdownEditor.readAloud",
+     "onCommand:markdownEditor.readSelection",
+     "onCommand:markdownEditor.listeningGuide",
+@@ -65,6 +66,11 @@
+       }
+     ],
+     "commands": [
++      {
++        "command": "markdownEditor.createJinjaTemplate",
++        "title": "Markdown Editor: Create Jinja Template from Examples",
++        "icon": "$(file-code)"
++      },
+       {
+         "command": "markdownEditor.openCustomEditor",
+         "title": "Open WYSIWYG Editor",
+@@ -429,7 +435,7 @@
+     "webpack-dev": "npm run build:editor && webpack --mode development --watch",
+     "test-compile": "tsc -p ./",
+     "lint": "eslint . --ext .ts,.tsx",
+-    "test": "npm run test-compile && node tests/speechText.test.js && node tests/listeningDocument.test.js && node tests/speechEngine.test.js && node tests/piperReader.test.js && node tests/voiceManager.test.js && node tests/documentationIndex.test.js && node tests/documentationExplorer.test.js && node tests/documentFormats.test.js && node tests/documentLoader.test.js && node tests/listeningWorkspace.test.js && node tests/projectListening.test.js && node tests/localAssistant.test.js && node tests/jinjaTemplate.test.js",
++    "test": "npm run test-compile && node tests/speechText.test.js && node tests/listeningDocument.test.js && node tests/speechEngine.test.js && node tests/piperReader.test.js && node tests/voiceManager.test.js && node tests/documentationIndex.test.js && node tests/documentationExplorer.test.js && node tests/documentFormats.test.js && node tests/documentLoader.test.js && node tests/listeningWorkspace.test.js && node tests/projectListening.test.js && node tests/localAssistant.test.js && node tests/jinjaTemplate.test.js && node tests/outputImport.test.js && node tests/jinjaExampleGenerator.test.js",
+     "voices:bundle": "python scripts/bundle_voices.py",
+     "voices:verify": "node scripts/verify-voices.js",
+     "runtime:verify": "node scripts/verify-runtime.js",
+diff --git a/src/codeGenerator.ts b/src/codeGenerator.ts
+index 9c7b1c7ebbcc8087c831a20a7c1e72970309c870..60f853f049d3fa98b774088f1da68a8609029218 100644
+--- a/src/codeGenerator.ts
++++ b/src/codeGenerator.ts
+@@ -2,9 +2,7 @@
+ // *.table-template.json mapping and writes the generated output file in the
+ // selected format. See TEMPLATE-SYNC.md for the mapping schema.
+ //
+-// Scope of this build: fresh generation with a .table-sync.bak backup of any
+-// existing output. Merge/import (reading the generated file back into the
+-// Markdown) and template-based DOCX surgery are not implemented yet.
++// Generation creates a .table-sync.bak backup of any existing output.
+ import * as path from 'path';
+ 
+ export class GenerationError extends Error {}
+@@ -48,7 +46,7 @@ export function extensionForFormat(format: string): string {
+ }
+ 
+ /** Extract the marked table as [headerRow, ...dataRows] of raw cell strings. */
+-export function extractTableRows(markdown: string, table: string): string[][] {
++export function extractTableRows(markdown: string, table: string, allowEmpty = false): string[][] {
+ 	const open = '<!-- table-sync:' + table + ' -->';
+ 	const close = '<!-- /table-sync:' + table + ' -->';
+ 	const start = markdown.indexOf(open);
+@@ -61,7 +59,7 @@ export function extractTableRows(markdown: string, table: string): string[][] {
+ 		.split(/\r?\n/)
+ 		.map((line) => line.trim())
+ 		.filter((line) => line.length > 0);
+-	if (lines.length < 3 || !/^\|?[\s:|-]+\|?$/.test(lines[1])) {
++	if (lines.length < (allowEmpty ? 2 : 3) || !/^\|?[\s:|-]+\|?$/.test(lines[1])) {
+ 		throw new GenerationError('The "' + table + '" block needs a header row, a separator row and at least one data row.');
+ 	}
+ 	const parseRow = (line: string): string[] => {
+@@ -103,9 +101,6 @@ export function buildRows(mapping: TemplateMapping, rows: string[][]): Record<st
+ 	if (mapping.key && colIndex[mapping.key] === undefined) {
+ 		throw new GenerationError('The Markdown table is missing the key column "' + mapping.key + '".');
+ 	}
+-	if (rows.length < 2) {
+-		throw new GenerationError('The "' + mapping.table + '" table has no data rows.');
+-	}
+ 	return rows.slice(1).map((cells) => {
+ 		const row: Record<string, unknown> = {};
+ 		for (const [name, col] of Object.entries(mapping.columns)) {
+@@ -423,7 +418,7 @@ export async function generateFromTemplate(
+ 	if (!EXTENSIONS[name]) {
+ 		throw new GenerationError('Unknown output format: ' + format);
+ 	}
+-	const rows = extractTableRows(markdown, mapping.table);
++	const rows = extractTableRows(markdown, mapping.table, true);
+ 	const data = buildRows(mapping, rows);
+ 	const fs = require('fs');
+ 	const dir = path.dirname(outAbs);
+diff --git a/src/createJinjaTemplate.ts b/src/createJinjaTemplate.ts
+new file mode 100644
+index 0000000000000000000000000000000000000000..802a09ef6040319446829710dceba4eae5283622
+--- /dev/null
++++ b/src/createJinjaTemplate.ts
+@@ -0,0 +1,60 @@
++import * as path from 'path';
++import { TextDecoder } from 'util';
++import * as vscode from 'vscode';
++import { generateJinjaFromExample } from './jinjaExampleGenerator';
++
++const templateExtensions = ['j2', 'jinja', 'jnt'];
++const maxExampleBytes = 512 * 1024;
++
++async function readExample(uri: vscode.Uri): Promise<string> {
++	const open = vscode.workspace.textDocuments.find(document => document.uri.toString() === uri.toString());
++	if (!open && (await vscode.workspace.fs.stat(uri)).size > maxExampleBytes) {
++		throw new Error('Choose a UTF-8 text example of at most 512 KiB.');
++	}
++	const bytes = open ? Buffer.from(open.getText(), 'utf8') : await vscode.workspace.fs.readFile(uri);
++	if (bytes.byteLength > maxExampleBytes || bytes.includes(0)) {
++		throw new Error('Choose a UTF-8 text example of at most 512 KiB.');
++	}
++	return new TextDecoder('utf-8', { fatal: true }).decode(bytes);
++}
++
++export interface CreatedTemplate {
++	sourceUri: string;
++	path: string;
++	name: string;
++	format: string;
++}
++
++export async function createJinjaTemplate(sourceHint?: vscode.Uri): Promise<CreatedTemplate | undefined> {
++	const pick = async (openLabel: string, defaultUri?: vscode.Uri) => (await vscode.window.showOpenDialog({
++		canSelectFiles: true, canSelectFolders: false, canSelectMany: false, openLabel, defaultUri
++	}))?.[0];
++
++	const source = await pick('Select source example', sourceHint);
++	if (!source) return;
++	const expected = await pick('Select expected output example', vscode.Uri.joinPath(source, '..'));
++	if (!expected) return;
++
++	const [input, output] = await Promise.all([readExample(source), readExample(expected)]);
++	const result = generateJinjaFromExample(input, source.fsPath, output, expected.fsPath);
++	const target = await vscode.window.showSaveDialog({
++		saveLabel: 'Save verified Jinja template',
++		defaultUri: vscode.Uri.joinPath(source, '..', path.parse(source.path).name + '-conversion.j2'),
++		filters: { 'Jinja templates': templateExtensions }
++	});
++	if (!target) return;
++	if (!templateExtensions.includes(path.extname(target.path).slice(1).toLowerCase())) {
++		throw new Error('Save the template with a .j2, .jinja or .jnt extension.');
++	}
++	const key = (uri: vscode.Uri) => process.platform === 'win32' ? uri.toString().toLowerCase() : uri.toString();
++	if ([source, expected].some(uri => key(uri) === key(target))) {
++		throw new Error('Save the template as a separate file from both examples.');
++	}
++
++	await vscode.workspace.fs.writeFile(target, Buffer.from(result.template, 'utf8'));
++	await vscode.window.showTextDocument(target, { viewColumn: vscode.ViewColumn.Beside, preserveFocus: true });
++	const count = result.bindings + (result.bindings === 1 ? ' source binding' : ' source bindings');
++	void vscode.window.showInformationMessage('Jinja template reproduced the expected example with ' + count +
++		(result.loop ? ' and a row loop.' : '.'));
++	return { sourceUri: source.toString(), path: target.fsPath, name: result.name, format: result.format };
++}
+diff --git a/src/extension.ts b/src/extension.ts
+index 885702a572afafacec876a93b1eaf0a290d5eb7e..94de31ec386dfb53ddbab2c5ecb313bc988e2436 100644
+--- a/src/extension.ts
++++ b/src/extension.ts
+@@ -1,3 +1,4 @@
++import { createJinjaTemplate } from './createJinjaTemplate';
+ import {ProjectListening} from './projectListening';
+ import {LocalAssistant} from './localAssistant';
+ import {DocumentLoader} from './documentLoader';
+@@ -83,6 +84,14 @@ export function activate(context: vscode.ExtensionContext) {
+ 		context.subscriptions.push(vscode.commands.registerCommand(command, callback));
+ 	}
+ 
++	registerCommand('markdownEditor.createJinjaTemplate', async (source?: vscode.Uri) => {
++		try {
++			return await createJinjaTemplate(source ?? vscode.window.activeTextEditor?.document.uri);
++		} catch (error) {
++			void vscode.window.showErrorMessage('Markdown Editor: ' + (error instanceof Error ? error.message : String(error)));
++		}
++	});
++
+ 	registerCommand('markdownEditor.openCustomEditor', async (uri: vscode.Uri) => {
+ 		// Sanity check. These cases shouldn't happen
+ 		if (vscode.window.activeTextEditor === undefined) {
+diff --git a/src/jinjaExampleGenerator.ts b/src/jinjaExampleGenerator.ts
+new file mode 100644
+index 0000000000000000000000000000000000000000..45b6d0cb34d7e675395e6aa6f8f7bc7a2f38814c
+--- /dev/null
++++ b/src/jinjaExampleGenerator.ts
+@@ -0,0 +1,252 @@
++import * as path from 'path';
++import { safeLoad } from 'js-yaml';
++import { buildMarkdownContext, ParsedTable } from './markdownTables';
++import { renderTemplate, splitTemplateFile, yamlScalar } from './jinjaTemplate';
++
++type Scalar = string | number | boolean;
++type Binding = { expression: string; value: Scalar };
++type Collection = { expression: string; records: Binding[][] };
++
++const aliases = new Map([['yml', 'yaml'], ['md', 'markdown'], ['htm', 'html']]);
++const isScalar = (value: unknown): value is Scalar =>
++	typeof value === 'string' || typeof value === 'number' || typeof value === 'boolean';
++const index = (key: string | number) => '[' + JSON.stringify(key) + ']';
++const literal = (value: string) => value.replace(/\{[{%#]|\{$/g, token => '{{ ' + JSON.stringify(token) + ' }}');
++const addressable = (key: string) => !/[\x00-\x1f]|\}\}|%\}/.test(key);
++
++function objectBindings(value: unknown, expression: string, bindings: Binding[], depth = 0) {
++	if (bindings.length >= 400 || depth > 6) return;
++	if (isScalar(value)) {
++		bindings.push({ expression, value });
++	} else if (value && typeof value === 'object') {
++		for (const [key, item] of Object.entries(value).slice(0, 100)) {
++			if (addressable(key)) objectBindings(item, expression + index(Array.isArray(value) ? Number(key) : key), bindings, depth + 1);
++		}
++	}
++}
++
++function sourceBindings(sourceText: string, sourceName: string) {
++	const context = buildMarkdownContext(sourceText, sourceName);
++	const bindings: Binding[] = [];
++	if (context.title) bindings.push({ expression: 'title', value: String(context.title) });
++	bindings.push({ expression: 'source', value: sourceName });
++	if (String(context.markdown).trim()) bindings.push({ expression: 'markdown', value: String(context.markdown) });
++
++	const collections: Collection[] = [];
++	let prologue = '';
++	for (const [tableIndex, table] of (context.tables as ParsedTable[]).slice(0, 8).entries()) {
++		const expression = 'tables[' + tableIndex + '].rows';
++		const records = table.rows.map(row => table.headers.flatMap((header, col) =>
++			row.cells[col] && addressable(header) ? [{ expression: 'row' + index(header), value: row[header] as Scalar }] : []));
++		collections.push({ expression, records });
++	}
++
++	const extension = path.extname(sourceName).toLowerCase();
++	if (['.json', '.yaml', '.yml'].includes(extension)) {
++		const json = extension === '.json';
++		const data = json ? JSON.parse(sourceText.replace(/^\uFEFF/, '')) : safeLoad(sourceText);
++		prologue = '{% set example_data = ' + (json ? 'json_parse' : 'yaml_parse') + '(markdown) %}';
++		objectBindings(data, 'example_data', bindings);
++		const addCollection = (value: unknown, expression: string, depth = 0) => {
++			if (depth > 3 || collections.length >= 12 || !value || typeof value !== 'object') return;
++			if (Array.isArray(value)) {
++				if (value.length > 1 && value.length <= 200) {
++					const records = value.map(record => {
++						const fields: Binding[] = [];
++						objectBindings(record, 'row', fields);
++						return fields;
++					});
++					collections.push({ expression, records });
++				}
++			} else {
++				for (const [key, child] of Object.entries(value).slice(0, 40)) {
++					if (addressable(key)) addCollection(child, expression + index(key), depth + 1);
++				}
++			}
++		};
++		addCollection(data, 'example_data');
++	} else {
++		for (const { expression, records } of collections) {
++			for (const [rowIndex, row] of records.slice(0, 100).entries()) {
++				for (const binding of row) {
++					if (isScalar(binding.value) && bindings.length < 400) {
++						bindings.push({ expression: expression + index(rowIndex) + binding.expression.slice(3), value: binding.value });
++					}
++				}
++			}
++		}
++	}
++	return { context, bindings, collections, prologue };
++}
++
++interface Match { sample: string; expression: string }
++function substitutions(bindings: Binding[], format: string): Match[] {
++	const matches = new Map<string, string | undefined>();
++	const add = (sample: string, expression: string) => {
++		if (!sample) return;
++		if (!matches.has(sample)) matches.set(sample, expression);
++		else if (matches.get(sample) !== expression) matches.set(sample, undefined);
++	};
++	for (const { value, expression } of bindings) {
++		const raw = String(value);
++		if (typeof value === 'string' && ['json', 'yaml'].includes(format)) add(JSON.stringify(value), expression + ' | tojson');
++		if (format === 'yaml' && typeof value === 'string' && yamlScalar(value) === raw) {
++			add(raw, expression + ' | yaml_scalar');
++			continue;
++		}
++		if (format === 'json' && typeof value === 'string' && !/^(?:true|false|-?(?:0|[1-9]\d*)(?:\.\d+)?)$/.test(raw)) continue;
++		if (format === 'csv' || format === 'tsv') {
++			const isCsv = format === 'csv';
++			const needsQuotes = (isCsv ? /[,"\r\n]/ : /[\t"\r\n]/).test(raw);
++			add(needsQuotes ? '"' + raw.replace(/"/g, '""') + '"' : raw, expression + (isCsv ? ' | csv_q' : ' | tsv_q'));
++		} else if (raw.length >= 3 || /^-?\d+(?:\.\d+)?$/.test(raw)) {
++			add(raw, expression);
++		}
++	}
++	return [...matches].flatMap(([sample, expression]) => expression ? [{ sample, expression }] : [])
++		.sort((a, b) => b.sample.length - a.sample.length);
++}
++
++function findLocations(text: string, format: string): (sample: string) => number[] {
++	if (format === 'json') {
++		// Match full JSON value tokens. A number inside a string or a
++		// string property name is not an interchangeable value.
++		const tokens = /"(?:\\[\s\S]|[^"\\])*"|-?(?:0|[1-9]\d*)(?:\.\d+)?(?:[eE][+-]?\d+)?|true|false|null/g;
++		const offsets = new Map<string, number[]>();
++		for (let token = tokens.exec(text); token; token = tokens.exec(text)) {
++			if (/^\s*:/.test(text.slice(tokens.lastIndex))) continue;
++			const seen = offsets.get(token[0]) ?? [];
++			seen.push(token.index);
++			offsets.set(token[0], seen);
++		}
++		return sample => offsets.get(sample) ?? [];
++	}
++	const delim = format === 'csv' ? ',' : format === 'tsv' ? '\t' : undefined;
++	const edge = (char?: string) => !char || char === delim || char === '\r' || char === '\n';
++	const word = (char?: string) => Boolean(char && /[\p{L}\p{N}_]/u.test(char));
++	return sample => {
++		const result: number[] = [];
++		let from = 0;
++		for (;;) {
++			const start = text.indexOf(sample, from);
++			if (start < 0) return result;
++			const end = start + sample.length;
++			from = end;
++			if (delim) {
++				if (!edge(text[start - 1]) || !edge(text[end])) continue;
++			} else {
++				if ((word(sample[0]) && word(text[start - 1])) ||
++					(word(sample[sample.length - 1]) && word(text[end]))) continue;
++				if (format === 'yaml' && /^\s*:/.test(text.slice(end))) continue;
++			}
++			result.push(start);
++		}
++	};
++}
++
++function bindText(text: string, matches: Match[], format: string) {
++	const spans: Array<{ start: number; end: number; expression: string }> = [];
++	const locate = findLocations(text, format);
++	for (const { sample, expression } of matches) {
++		for (const start of locate(sample)) {
++			const end = start + sample.length;
++			spans.push({ start, end, expression });
++		}
++	}
++	spans.sort((a, b) => a.start - b.start || b.end - a.end);
++	let next = 0;
++	let body = '';
++	let count = 0;
++	for (const span of spans) {
++		if (span.start < next) continue;
++		count++;
++		body += literal(text.slice(next, span.start)) + '{{ ' + span.expression + ' }}';
++		next = span.end;
++	}
++	return { body: body + literal(text.slice(next)), bindings: count };
++}
++
++function inferLoop(expected: string, collection: Collection, format: string) {
++	const records = collection.records;
++	if (records.length < 2 || records.length > 200) return undefined;
++	const eol = expected.includes('\r\n') ? '\r\n' : '\n';
++	const lines = expected.split(eol);
++	if (lines.length > 4000 || expected.length > 128 * 1024) return undefined;
++	const varying = records[0].filter(first => {
++		const values = records.map(row => row.find(binding => binding.expression === first.expression)?.value);
++		return values.every(value => value !== undefined) && new Set(values).size > 1;
++	});
++	const matchers = records.map(row => substitutions(row.filter(item =>
++		varying.some(first => first.expression === item.expression)), format));
++	const locate = findLocations(expected, format);
++	for (const anchor of varying.slice(0, 6)) {
++		const positions = records.map((row, rowIndex) => {
++			const value = row.find(item => item.expression === anchor.expression)!.value;
++			for (const option of matchers[rowIndex]) {
++				if (option.sample !== String(value) && option.sample !== JSON.stringify(value)) continue;
++				const found = locate(option.sample);
++				if (found.length === 1) return expected.slice(0, found[0]).split(eol).length - 1;
++			}
++			return -1;
++		});
++		const width = positions[1] - positions[0];
++		if (positions[0] < 0 || width < 1 || width > 48 ||
++			!positions.every((line, i) => line === positions[0] + i * width)) continue;
++		for (let offset = 0; offset < width; offset++) {
++			const start = positions[0] - offset, stop = start + width * records.length;
++			if (start < 0 || stop > lines.length) continue;
++			const chunks = records.map((_, i) => lines.slice(start + i * width, start + (i + 1) * width).join(eol));
++			const comma = format === 'json' && !chunks[chunks.length - 1].endsWith(',') &&
++				chunks.slice(0, -1).every(chunk => chunk.endsWith(','));
++			const parts = chunks.map((chunk, i) => bindText(comma && i < chunks.length - 1 ? chunk.slice(0, -1) : chunk, matchers[i], format));
++			if (!parts[0].bindings || !parts.every(part => part.body === parts[0].body)) continue;
++			return {
++				prefix: start ? lines.slice(0, start).join(eol) + eol : '',
++				suffix: stop < lines.length ? eol + lines.slice(stop).join(eol) : '',
++				body: '{% for row in ' + collection.expression + ' %}' + parts[0].body +
++					'{% if not loop.last %}' + (comma ? ',' : '') + eol + '{% endif %}{% endfor %}',
++				bindings: parts[0].bindings
++			};
++		}
++	}
++}
++
++export function generateJinjaFromExample(sourceText: string, sourceFile: string, expected: string, expectedFile: string) {
++	if (!expected.trim()) throw new Error('The expected output example is empty.');
++	const sourceName = path.basename(sourceFile);
++	const exampleName = path.basename(expectedFile);
++	const extension = (exampleName === '.env' ? 'env' : path.extname(exampleName).slice(1)).toLowerCase();
++	const format = aliases.get(extension) || (/^[a-z0-9_-]+$/.test(extension) ? extension : 'txt');
++	if (format === 'docx') throw new Error('Jinja templates generate text. Choose a text output example.');
++	if (format === 'json') JSON.parse(expected);
++	if (format === 'yaml') safeLoad(expected);
++	const { context, bindings, collections, prologue } = sourceBindings(sourceText, sourceName);
++	const matched = substitutions(bindings, format);
++	let result = bindText(expected, matched, format);
++	let loop = false;
++	for (const collection of collections) {
++		const inferred = inferLoop(expected, collection, format);
++		if (!inferred) continue;
++		const prefix = bindText(inferred.prefix, matched, format);
++		const suffix = bindText(inferred.suffix, matched, format);
++		const body = prefix.body + inferred.body + suffix.body;
++		if (renderTemplate(prologue + body, context) !== expected) continue;
++		result = { body, bindings: prefix.bindings + inferred.bindings + suffix.bindings };
++		loop = true;
++		break;
++	}
++	if (renderTemplate(prologue + result.body, context) !== expected) {
++		throw new Error('The inferred template did not reproduce the expected output.');
++	}
++	if (result.bindings === 0) {
++		throw new Error('No unambiguous source values matched the expected output. Try examples with distinctive values or two corresponding table rows.');
++	}
++	const name = path.basename(sourceName, path.extname(sourceName)).replace(/[\r\n'"]/g, ' ').trim() + ' conversion';
++	const output = /^['"]|['"]$|[\r\n]/.test(exampleName) ? '' : 'output: ' + exampleName + '\n';
++	const template = '---\nname: ' + name + '\nformat: ' + format + '\n' + output + '---\n' + prologue + result.body;
++	const parsed = splitTemplateFile(template);
++	if (renderTemplate(parsed.body, { ...context, params: parsed.params }) !== expected) {
++		throw new Error('The generated template could not be verified with its metadata.');
++	}
++	return { template, name, format, bindings: result.bindings, loop };
++}
+diff --git a/src/jinjaTemplate.ts b/src/jinjaTemplate.ts
+index 76590c7072bf1d8d69e89468f2dcfbb243864df1..ee4ac50e1cc14904b4b68b8f70570eaa1e782e34 100644
+--- a/src/jinjaTemplate.ts
++++ b/src/jinjaTemplate.ts
+@@ -680,7 +680,15 @@ function csvQuote(s: string): string {
+ }
+ 
+ function tsvQuote(s: string): string {
+-	return /[	\r\n]/.test(s) ? '"' + s.replace(/"/g, '""') + '"' : s;
++	return /[	"\r\n]/.test(s) ? '"' + s.replace(/"/g, '""') + '"' : s;
++}
++
++// A plain scalar keeps the sample's spelling. Quote new values that would
++// otherwise become YAML syntax or acquire a different type.
++export function yamlScalar(value: unknown): string {
++	if (typeof value !== 'string') return JSON.stringify(value ?? null);
++	if (/^[A-Za-z_][A-Za-z0-9_./ -]*$/.test(value) && value.trimEnd() === value && yamlSafeLoad(value) === value) return value;
++	return JSON.stringify(value);
+ }
+ 
+ function makeFilters(): Record<string, FilterFn> {
+@@ -740,9 +748,10 @@ function makeFilters(): Record<string, FilterFn> {
+ 		table_rows: (v) => parseTableRows(String(v ?? '')),
+ 		// YAML double-quoted scalar (JSON string escaping is valid YAML).
+ 		yaml_q: (v) => JSON.stringify(String(v ?? '')),
++		yaml_scalar: yamlScalar,
+ 		// RFC 4180 CSV field: quoted when it contains a comma, quote or newline.
+ 		csv_q: (v) => csvQuote(String(v ?? '')),
+-		// TSV field: quoted when it contains a tab or newline.
++		// TSV field: quoted when it contains a tab, quote or newline.
+ 		tsv_q: (v) => tsvQuote(String(v ?? '')),
+ 		// XML text/attribute escaping (& first, then < > ").
+ 		xml_escape: (v) =>
+diff --git a/src/markdownEditor.ts b/src/markdownEditor.ts
+index 4e52750c7c002a8cecd767ddc4d63a78a06a6761..e3efa79c1244f0958ac63d7b7b79eaa4e7026023 100644
+--- a/src/markdownEditor.ts
++++ b/src/markdownEditor.ts
+@@ -1,15 +1,17 @@
++import type { CreatedTemplate } from './createJinjaTemplate';
+ import * as path from 'path';
+ import * as fs from 'fs';
+ import * as vscode from 'vscode';
+ import { extensionState } from './extension';
+ import { generateFromTemplate, extensionForFormat, GenerationError, TemplateMapping } from './codeGenerator';
++import { canImportMapping, importMappedOutput, preserveMappingMarkers } from './outputImport';
++import { importRegisterMap } from './registerMapImport';
+ import { renderTemplate, splitTemplateFile, TemplateError } from './jinjaTemplate';
+ import {
+ 	buildMarkdownContext,
+ 	fingerprintsFromDocument,
+ 	diffFingerprints,
+-	findRegisterSpan,
+-	Fingerprint
++	findRegisterSpan
+ } from './markdownTables';
+ 
+ const prettier = require('prettier');
+@@ -74,6 +76,22 @@ function currentOutputFolder(): string {
+ 	return root ? path.join(root, configured) : configured;
+ }
+ 
++interface OutputLink {
++	sourcePath: string;
++	outputAbs: string;
++	format: string;
++	sourceBaseline: string;
++	outputBaseline: string;
++	templatePath?: string;
++	reverse?: (markdown: string, previous: string, output: string) => string | Promise<string>;
++	watcher?: vscode.FileSystemWatcher;
++	saveSubscription?: vscode.Disposable;
++	forwardTimer?: NodeJS.Timeout;
++	reverseTimer?: NodeJS.Timeout;
++	queue: Promise<void>;
++	disposed: boolean;
++}
++
+ export class MarkdownEditorProvider implements vscode.CustomTextEditorProvider {
+ 	public static register(context: vscode.ExtensionContext): vscode.Disposable {
+ 		const provider = new MarkdownEditorProvider(context);
+@@ -84,85 +102,157 @@ export class MarkdownEditorProvider implements vscode.CustomTextEditorProvider {
+ 				webviewOptions: { retainContextWhenHidden: true },
+ 			}
+ 		);
+-		return providerRegistration;
++		return vscode.Disposable.from(providerRegistration, { dispose: () => provider.disposeLinks() });
+ 	}
+ 
+ 	static readonly viewType = 'markdownEditor.customEditor';
+ 
+ 	constructor(private readonly context: vscode.ExtensionContext) {}
+ 
+-	// Live input -> output link: after a Jinja generation, editing a section
+-	// in the open document re-renders the output file and scrolls the output
+-	// editor to that section (see liveSync / doLiveSync).
+-	private liveSessions = new Map<
+-		vscode.WebviewPanel,
+-		{ templatePath: string; outputAbs: string; format: string; fingerprints: Fingerprint[] }
+-	>();
+-	private liveSyncTimers = new Map<vscode.WebviewPanel, NodeJS.Timeout>();
+-
+-	// Debounced: one live re-render per burst of keystrokes per editor.
+-	private liveSync(webviewPanel: vscode.WebviewPanel, document: vscode.TextDocument): void {
+-		if (!this.liveSessions.has(webviewPanel)) return;
+-		const pending = this.liveSyncTimers.get(webviewPanel);
+-		if (pending) clearTimeout(pending);
+-		this.liveSyncTimers.set(
+-			webviewPanel,
+-			setTimeout(() => {
+-				this.liveSyncTimers.delete(webviewPanel);
+-				const session = this.liveSessions.get(webviewPanel);
+-				if (session) void this.doLiveSync(session, document);
+-			}, 400)
+-		);
++	private readonly liveSessions = new Map<vscode.WebviewPanel, OutputLink>();
++	private readonly outputLinks = new Map<string, OutputLink>();
++
++	private stopLink(link: OutputLink): void {
++		link.disposed = true;
++		if (link.forwardTimer) clearTimeout(link.forwardTimer);
++		if (link.reverseTimer) clearTimeout(link.reverseTimer);
++		link.watcher?.dispose();
++		link.saveSubscription?.dispose();
++		this.outputLinks.delete(link.outputAbs);
++		for (const [panel, active] of this.liveSessions) {
++			if (active === link) this.liveSessions.delete(panel);
++		}
+ 	}
+ 
+-	private async doLiveSync(
+-		session: { templatePath: string; outputAbs: string; format: string; fingerprints: Fingerprint[] },
+-		document: vscode.TextDocument
+-	): Promise<void> {
+-		try {
+-			const text = document.getText();
+-			const newFingerprints = fingerprintsFromDocument(text);
+-			const changed = diffFingerprints(session.fingerprints, newFingerprints);
+-			if (changed === null) return; // nothing section-visible changed
+-
+-			// Render the template against the current document text.
+-			const raw = await fs.promises.readFile(session.templatePath, 'utf8');
+-			const { params, body } = splitTemplateFile(raw);
+-			const context = buildMarkdownContext(text, path.basename(document.fileName));
+-			context.params = params;
+-			const output = renderTemplate(body, context);
+-
+-			// Never clobber unsaved user edits in the output file.
+-			const outDoc = vscode.workspace.textDocuments.find((d) => d.uri.fsPath === session.outputAbs);
+-			const skipWrite = outDoc ? outDoc.isDirty : false;
+-			let shown = output;
+-			if (skipWrite) {
+-				try {
+-					shown = await fs.promises.readFile(session.outputAbs, 'utf8');
+-				} catch {
+-					shown = output;
+-				}
+-			} else {
+-				await fs.promises.mkdir(path.dirname(session.outputAbs), { recursive: true });
+-				await fs.promises.writeFile(session.outputAbs, output, 'utf8');
+-			}
++	private disposeLinks(): void {
++		for (const link of this.outputLinks.values()) this.stopLink(link);
++	}
++
++	private async releaseOutput(output: string): Promise<void> {
++		const link = this.outputLinks.get(path.resolve(output));
++		if (!link) return;
++		this.stopLink(link);
++		await link.queue;
++	}
+ 
+-			session.fingerprints = newFingerprints;
++	private startLink(panel: vscode.WebviewPanel, config: Omit<OutputLink, 'queue' | 'disposed'>): void {
++		const previous = this.outputLinks.get(config.outputAbs);
++		if (previous) this.stopLink(previous);
++		const active = this.liveSessions.get(panel);
++		if (active && !active.reverse) this.stopLink(active);
++		else if (active?.forwardTimer) clearTimeout(active.forwardTimer);
++		const link: OutputLink = { ...config, queue: Promise.resolve(), disposed: false };
++		this.liveSessions.set(panel, link);
++		this.outputLinks.set(link.outputAbs, link);
++		if (!link.reverse) return;
++
++		const pattern = new vscode.RelativePattern(path.dirname(link.outputAbs), '*');
++		link.watcher = vscode.workspace.createFileSystemWatcher(pattern, false, false, true);
++		const handle = (uri: vscode.Uri) => {
++			if (uri.fsPath !== link.outputAbs) return;
++			if (link.reverseTimer) clearTimeout(link.reverseTimer);
++			link.reverseTimer = setTimeout(() => {
++				void this.queueLink(link, () => this.importOutput(link));
++			}, 300);
++		};
++		link.watcher.onDidChange(handle);
++		link.watcher.onDidCreate(handle);
++		link.saveSubscription = vscode.workspace.onDidSaveTextDocument(saved => {
++			if (saved.uri.fsPath === link.outputAbs) handle(saved.uri);
++		});
++	}
+ 
+-			// Scroll the output editor to the changed section and select it.
+-			const span = findRegisterSpan(shown, session.format, changed);
+-			if (!span) return; // section removed — the file was still updated
+-			const editor = vscode.window.visibleTextEditors.find(
+-				(ed) => ed.document.uri.fsPath === session.outputAbs
+-			);
+-			if (!editor) return;
+-			const endLine = Math.min(span.end, editor.document.lineCount - 1);
+-			const range = new vscode.Range(span.start, 0, endLine, 0);
+-			editor.selection = new vscode.Selection(range.start, range.end);
+-			editor.revealRange(range, vscode.TextEditorRevealType.InCenterIfOutsideViewport);
+-		} catch (err) {
+-			console.warn('Markdown Editor: live sync skipped:', err);
++	private queueLink(link: OutputLink, operation: () => Promise<void>): Promise<void> {
++		const run = link.queue.then(async () => {
++			if (!link.disposed) await operation();
++		});
++		link.queue = run.catch(err => {
++			if (!link.disposed) void vscode.window.showWarningMessage('Markdown Editor: ' + (err instanceof Error ? err.message : String(err)));
++		});
++		return link.queue;
++	}
++
++	private async importOutput(link: OutputLink): Promise<void> {
++		if (!link.reverse) return;
++		const outputDocument = vscode.workspace.textDocuments.find(doc => doc.uri.fsPath === link.outputAbs);
++		if (outputDocument?.isDirty) return;
++		const output = await fs.promises.readFile(link.outputAbs, 'utf8');
++		if (output === link.outputBaseline) return;
++
++		const source = await vscode.workspace.openTextDocument(vscode.Uri.file(link.sourcePath));
++		if (source.isDirty || source.getText() !== link.sourceBaseline) {
++			throw new GenerationError('Output sync paused because the Markdown source also changed. Both files were kept.');
+ 		}
++		const markdown = await link.reverse(link.sourceBaseline, link.outputBaseline, output);
++		if (link.disposed || source.isDirty || source.getText() !== link.sourceBaseline || outputDocument?.isDirty ||
++			await fs.promises.readFile(link.outputAbs, 'utf8') !== output) return;
++		if (link.disposed || source.isDirty || source.getText() !== link.sourceBaseline) return;
++
++		if (markdown !== link.sourceBaseline) {
++			const edit = new vscode.WorkspaceEdit();
++			edit.replace(source.uri, new vscode.Range(0, 0, source.lineCount, 0), markdown);
++			if (!(await vscode.workspace.applyEdit(edit))) throw new GenerationError('Could not apply output changes to Markdown.');
++			if (source.getText() !== markdown || !(await source.save())) throw new GenerationError('Output changes are in the Markdown editor. Save the source to finish syncing.');
++			link.sourceBaseline = source.getText();
++		}
++		link.outputBaseline = output;
++	}
++
++	private liveSync(panel: vscode.WebviewPanel, document: vscode.TextDocument): void {
++		const link = this.liveSessions.get(panel);
++		if (!link?.templatePath || document.uri.fsPath !== link.sourcePath) return;
++		if (link.forwardTimer) clearTimeout(link.forwardTimer);
++		link.forwardTimer = setTimeout(() => {
++			void this.queueLink(link, () => this.doLiveSync(link, document));
++		}, 400);
++	}
++
++	private async doLiveSync(link: OutputLink, document: vscode.TextDocument): Promise<void> {
++		const source = document.getText();
++		if (source === link.sourceBaseline || !link.templatePath) return;
++		const outputDocument = vscode.workspace.textDocuments.find(doc => doc.uri.fsPath === link.outputAbs);
++		if (outputDocument?.isDirty) return;
++		if (await fs.promises.readFile(link.outputAbs, 'utf8') !== link.outputBaseline) {
++			throw new GenerationError('Output sync paused because the generated file also changed. Both files were kept.');
++		}
++		const { params, body } = splitTemplateFile(await fs.promises.readFile(link.templatePath, 'utf8'));
++		const context = buildMarkdownContext(source, path.basename(document.fileName));
++		context.params = params;
++		const output = renderTemplate(body, context);
++		if (link.disposed || outputDocument?.isDirty || document.getText() !== source) return;
++		if (await fs.promises.readFile(link.outputAbs, 'utf8') !== link.outputBaseline ||
++			link.disposed || outputDocument?.isDirty || document.getText() !== source) return;
++		const changed = diffFingerprints(fingerprintsFromDocument(link.sourceBaseline), fingerprintsFromDocument(source));
++		if (output !== link.outputBaseline) {
++			await fs.promises.writeFile(link.outputAbs, output, 'utf8');
++			link.outputBaseline = output;
++		}
++		link.sourceBaseline = source;
++		const span = changed && findRegisterSpan(output, link.format, changed);
++		const editor = vscode.window.visibleTextEditors.find(ed => ed.document.uri.fsPath === link.outputAbs);
++		if (!span || !editor) return;
++		const range = new vscode.Range(span.start, 0, Math.min(span.end, editor.document.lineCount - 1), 0);
++		editor.selection = new vscode.Selection(range.start, range.end);
++		editor.revealRange(range, vscode.TextEditorRevealType.InCenterIfOutsideViewport);
++	}
++
++	private reverseJinja(templatePath: string, format: string, reverse: string | undefined): OutputLink['reverse'] {
++		const bundled = /^(?:register-map-to-yaml|register-map-to-json)\.(?:j2|jinja|jnt)$/i.test(path.basename(templatePath));
++		if ((reverse === 'register-map' || (!reverse && bundled)) && ['yaml', 'json'].includes(format)) {
++			return importRegisterMap;
++		}
++		if (!reverse || reverse === 'register-map') return undefined;
++		const reversePath = path.resolve(path.dirname(templatePath), reverse);
++		return async (markdown, previous, output) => {
++			const { params, body } = splitTemplateFile(await fs.promises.readFile(reversePath, 'utf8'));
++			const context = buildMarkdownContext(output, 'generated.' + extensionForFormat(format));
++			context.params = params;
++			context.original_markdown = markdown;
++			context.previous_output = previous;
++			const result = renderTemplate(body, context);
++			if (!result.trim()) throw new GenerationError('The reverse template returned empty Markdown.');
++			return result;
++		};
+ 	}
+ 
+ 	private sendOutputFolder(webviewPanel: vscode.WebviewPanel) {
+@@ -231,8 +321,15 @@ export class MarkdownEditorProvider implements vscode.CustomTextEditorProvider {
+ 		});
+ 	}
+ 
+-	private async executeDocumentCommand(document: vscode.TextDocument, command: string) {
++	private async executeDocumentCommand(document: vscode.TextDocument, command: string, panel: vscode.WebviewPanel) {
+ 		switch (command) {
++			case 'markdownEditor.createJinjaTemplate': {
++				const template = await vscode.commands.executeCommand<CreatedTemplate | undefined>(command, document.uri);
++				if (template?.sourceUri === document.uri.toString()) {
++					await panel.webview.postMessage({ type: 'templatePicked', kind: 'jinja', ...template });
++				}
++				break;
++			}
+ 			case 'markdownEditor.documentation.mindmap':
+ 				await vscode.commands.executeCommand(command);
+ 				break;
+@@ -298,17 +395,22 @@ export class MarkdownEditorProvider implements vscode.CustomTextEditorProvider {
+ 		// Remember that a single text document can also be shared between multiple custom
+ 		// editors (this happens for example when you split a custom editor)
+ 
+-		function updateWebview() {
+-			let text = document.getText();
++		let pendingEdit = Promise.resolve();
++		let synchronizedText: string | undefined;
+ 
++		function updateWebview() {
++			synchronizedText = document.getText();
+ 			// CKEditor uses LF internally.
+-			text = text.replace(/(?:\r\n|\r|\n)/g, '\n');
+-
+-			webviewPanel.webview.postMessage({ type: 'documentChanged', text: text });
++			const text = synchronizedText.replace(/(?:\r\n|\r|\n)/g, '\n');
++			webviewPanel.webview.postMessage({ type: 'documentChanged', text });
+ 		}
+ 
+-		const saveDocumentSubscription = vscode.workspace.onDidSaveTextDocument((saved) => {
+-			if (saved === document) updateWebview();
++		const saveDocumentSubscription = vscode.workspace.onDidSaveTextDocument(async (saved) => {
++			if (saved !== document) return;
++			await pendingEdit;
++			// The editor already contains edits it sent. Replacing them on
++			// auto-save risks resetting the selection and undo history.
++			if (document.getText() !== synchronizedText) updateWebview();
+ 		});
+ 
+ 		const onDidChangeOutputFolder = vscode.workspace.onDidChangeConfiguration((e) => {
+@@ -326,22 +428,23 @@ export class MarkdownEditorProvider implements vscode.CustomTextEditorProvider {
+ 						console.log('markdownEditor.editorIsActive', false);
+ 					});
+ 			}
+-			const liveTimer = this.liveSyncTimers.get(webviewPanel);
+-			if (liveTimer) clearTimeout(liveTimer);
+-			this.liveSyncTimers.delete(webviewPanel);
++			const link = this.liveSessions.get(webviewPanel);
++			if (link?.forwardTimer) clearTimeout(link.forwardTimer);
++			if (link && !link.reverse) this.stopLink(link);
+ 			this.liveSessions.delete(webviewPanel);
+ 			saveDocumentSubscription.dispose();
+ 			onDidChangeOutputFolder.dispose();
+ 		});
+ 
+ 		// Receive message from the webview.
+-		let pendingEdit = Promise.resolve();
+ 		webviewPanel.webview.onDidReceiveMessage(async (e) => {
+ 			try {
+ 				switch (e?.type) {
+ 					case 'webviewChanged':
+ 						if (typeof e.text === 'string') {
+-							const edit = pendingEdit.then(() => this.updateTextDocument(document, e.text));
++							const edit = pendingEdit.then(async () => {
++								synchronizedText = await this.updateTextDocument(document, e.text);
++							});
+ 							pendingEdit = edit.catch(() => undefined);
+ 							await edit;
+ 							this.liveSync(webviewPanel, document);
+@@ -366,7 +469,7 @@ export class MarkdownEditorProvider implements vscode.CustomTextEditorProvider {
+ 						break;
+ 					case 'executeCommand':
+ 						await pendingEdit;
+-						await this.executeDocumentCommand(document, e.command);
++						await this.executeDocumentCommand(document, e.command, webviewPanel);
+ 						break;
+ 				}
+ 			} catch (err) {
+@@ -416,11 +519,13 @@ export class MarkdownEditorProvider implements vscode.CustomTextEditorProvider {
+ 		}
+ 
+ 		let outAbs: string;
++		let output: string;
++		const sourceBaseline = document.getText();
+ 		let usedFolder = '';
+ 		try {
+-			const context = buildMarkdownContext(document.getText(), path.basename(document.fileName));
++			const context = buildMarkdownContext(sourceBaseline, path.basename(document.fileName));
+ 			context.params = params;
+-			const text = renderTemplate(body, context);
++			output = renderTemplate(body, context);
+ 			// Output name: the template's "output" basename when declared,
+ 			// otherwise the opened document's basename; extension from format.
+ 			const base = metadata.output
+@@ -432,8 +537,9 @@ export class MarkdownEditorProvider implements vscode.CustomTextEditorProvider {
+ 				base + '.' + extensionForFormat(requestedFormat)
+ 			);
+ 			assertOutputIsSeparate(outAbs, document.fileName, templatePath);
++			await this.releaseOutput(outAbs);
+ 			await fs.promises.mkdir(path.dirname(outAbs), { recursive: true });
+-			await fs.promises.writeFile(outAbs, text, 'utf8');
++			await fs.promises.writeFile(outAbs, output, 'utf8');
+ 		} catch (err: any) {
+ 			const message =
+ 				err instanceof TemplateError ? err.message : `generation failed: ${err?.message ?? err}`;
+@@ -449,15 +555,14 @@ export class MarkdownEditorProvider implements vscode.CustomTextEditorProvider {
+ 			`Markdown Editor: generated ${rel} (${extensionForFormat(requestedFormat)})${folderNote}.`
+ 		);
+ 
+-		// Start the live input -> output link: remember this generation, open
+-		// the output file beside the editor, and from now on every section
+-		// edit here re-renders the file and scrolls the output to that section.
+-		this.liveSessions.set(webviewPanel, {
+-			templatePath,
+-			outputAbs: outAbs,
+-			format: requestedFormat,
+-			fingerprints: fingerprintsFromDocument(document.getText())
+-		});
++		if (document.uri.scheme === 'file') {
++			this.startLink(webviewPanel, {
++				templatePath, outputAbs: path.resolve(outAbs), format: requestedFormat,
++				sourcePath: document.uri.fsPath, sourceBaseline, outputBaseline: output,
++				reverse: this.reverseJinja(templatePath, requestedFormat, metadata.reverse)
++			});
++		}
++
+ 		void Promise.resolve(
+ 			vscode.window.showTextDocument(vscode.Uri.file(outAbs), {
+ 				viewColumn: vscode.ViewColumn.Beside,
+@@ -511,7 +616,15 @@ export class MarkdownEditorProvider implements vscode.CustomTextEditorProvider {
+ 
+ 		const source = vscode.workspace.textDocuments.find((open) => open.uri.fsPath === markdownPath);
+ 		const markdownText = source?.getText() ?? await fs.promises.readFile(markdownPath, 'utf8');
++		await this.releaseOutput(outAbs);
+ 		await generateFromTemplate(mapping, markdownText, requestedFormat, outAbs);
++		if (canImportMapping(requestedFormat)) {
++			this.startLink(webviewPanel, {
++				sourcePath: markdownPath, outputAbs: path.resolve(outAbs), format: requestedFormat,
++				sourceBaseline: markdownText, outputBaseline: await fs.promises.readFile(outAbs, 'utf8'),
++				reverse: (markdown, previous, output) => importMappedOutput(markdown, previous, output, mapping, requestedFormat)
++			});
++		}
+ 
+ 		const rel = vscode.workspace.asRelativePath(outAbs, true) || outAbs;
+ 		vscode.window.showInformationMessage(`Markdown Editor: generated ${rel} (${extensionForFormat(requestedFormat)}).`);
+@@ -555,15 +668,17 @@ export class MarkdownEditorProvider implements vscode.CustomTextEditorProvider {
+ 
+ 	// Save new content to the text document
+ 	private async updateTextDocument(document: vscode.TextDocument, text: string) {
+-		const formatted = prettier.format(text, { parser: 'markdown' }) as string;
++		const input = preserveMappingMarkers(document.getText(), text);
++		const formatted = prettier.format(input, { parser: 'markdown' }) as string;
+ 		const eol = document.eol === vscode.EndOfLine.CRLF ? '\r\n' : '\n';
+ 		const normalized = formatted.replace(/(?:\r\n|\r|\n)/g, eol);
+-		if (normalized === document.getText()) return;
++		if (normalized === document.getText()) return normalized;
+ 		const edit = new vscode.WorkspaceEdit();
+ 		edit.replace(document.uri, new vscode.Range(0, 0, document.lineCount, 0), normalized);
+ 		if (!(await vscode.workspace.applyEdit(edit))) {
+ 			throw new Error('Could not update the Markdown document.');
+ 		}
++		return normalized;
+ 	}
+ }
+ 
+diff --git a/src/markdownTables.ts b/src/markdownTables.ts
+index 2b28b230ff695ad7918b9fe4c048540eec62b452..e824b81b8aca483b791bee00f4d9041db0d7e9b8 100644
+--- a/src/markdownTables.ts
++++ b/src/markdownTables.ts
+@@ -104,7 +104,8 @@ export function descBase(s: string): string {
+ 	for (const c of [br, tbl, arr]) {
+ 		if (c !== -1) cut = Math.min(cut, c);
+ 	}
+-	return unescapeMarkdownCell(s.slice(0, cut)).trim();
++	const description = s.slice(0, cut);
++	return unescapeMarkdownCell(tbl === -1 ? description : description.replace(/<\/?p(?:\s[^>]*)?>/gi, '')).trim();
+ }
+ 
+ // "Array: 8 x u32 (4 byte elements)" -> { length: 8, bit_width: 32 } | null.
+@@ -240,7 +241,18 @@ function findTableRuns(lines: string[]): TableRun[] {
+ 	return runs;
+ }
+ 
++export interface RegisterRowLocation {
++	row: ParsedRow;
++	line: number;
++	end: number;
++	sub?: TableRun;
++}
++
+ export function buildRegisterRows(markdown: string): ParsedRow[] {
++	return locateRegisterRows(markdown).map(entry => entry.row);
++}
++
++export function locateRegisterRows(markdown: string): RegisterRowLocation[] {
+ 	const lines = markdown.split(/\r?\n/);
+ 	const runs = findTableRuns(lines);
+ 	const main = runs[0];
+@@ -266,7 +278,7 @@ export function buildRegisterRows(markdown: string): ParsedRow[] {
+ 	}
+ 	rowLineIdx.sort((a, b) => a - b);
+ 
+-	const rows: ParsedRow[] = [];
++	const rows: RegisterRowLocation[] = [];
+ 	rowLineIdx.forEach((k, n) => {
+ 		const cells = splitTableCells(lines[k]);
+ 		const row: ParsedRow = { cells };
+@@ -292,7 +304,7 @@ export function buildRegisterRows(markdown: string): ParsedRow[] {
+ 				row.subrows.push(splitTableCells(lines[j]));
+ 			}
+ 		}
+-		rows.push(row);
++		rows.push({ row, line: k, end, sub });
+ 	});
+ 	return rows;
+ }
+diff --git a/src/outputImport.ts b/src/outputImport.ts
+new file mode 100644
+index 0000000000000000000000000000000000000000..a3e610e36184a0829d32cb85ec59e35d0e347cf3
+--- /dev/null
++++ b/src/outputImport.ts
+@@ -0,0 +1,269 @@
++import { safeLoad } from 'js-yaml';
++import { splitTableCells } from './markdownTables';
++import { extractTableRows, GenerationError, TemplateMapping } from './codeGenerator';
++
++type Row = Record<string, unknown>;
++
++function lookup(value: unknown, keys: string[]): unknown {
++	for (const key of keys) {
++		if (!value || typeof value !== 'object' || !Object.prototype.hasOwnProperty.call(value, key)) return undefined;
++		value = (value as Row)[key];
++	}
++	return value;
++}
++
++function delimited(text: string, delimiter: string): string[][] {
++	const rows: string[][] = [];
++	let row: string[] = [], value = '', quoted = false;
++	for (let i = 0; i < text.length; i++) {
++		const ch = text[i];
++		if (quoted) {
++			if (ch !== '"') value += ch;
++			else if (text[i + 1] === '"') { value += '"'; i++; }
++			else quoted = false;
++		} else if (ch === '"' && !value) quoted = true;
++		else if (ch === delimiter) { row.push(value); value = ''; }
++		else if (ch === '\n' || ch === '\r') {
++			if (ch === '\r' && text[i + 1] === '\n') i++;
++			row.push(value);
++			if (row.length > 1 || row[0] !== '') rows.push(row);
++			row = [];
++			value = '';
++		} else value += ch;
++	}
++	if (quoted) throw new GenerationError('The output has an unclosed quoted field.');
++	if (row.length || value) rows.push([...row, value]);
++	return rows;
++}
++
++function columnsFromGrid(grid: string[][], names: string[]): Row[] {
++	const [header, ...rows] = grid;
++	if (!header || names.some(name => header.filter(h => h === name).length !== 1)) {
++		throw new GenerationError('The output table is missing mapped columns or contains duplicate headers.');
++	}
++	return rows.map(row => {
++		if (row.length !== header.length) throw new GenerationError('An output row has a different number of columns than its header.');
++		return Object.fromEntries(names.map(name => [name, row[header.indexOf(name)]]));
++	});
++}
++
++interface ElementNode {
++	type: string;
++	name: string;
++	attribs: Record<string, string>;
++	children: ElementNode[];
++	data?: string;
++}
++const children = (node: ElementNode) => (node.children || []).filter(c => !!c.name);
++const textContent = (node: ElementNode): string => node.data ?? (node.children || []).map(textContent).join('');
++function descendants(node: ElementNode, name: string): ElementNode[] {
++	return children(node).flatMap(child => child.name === name ? [child] : descendants(child, name));
++}
++
++function markupRows(text: string, mapping: TemplateMapping, format: string): Row[] {
++	const doc = require('htmlparser2').parseDocument(text, { xmlMode: format === 'xml', decodeEntities: true }) as ElementNode;
++	const names = Object.keys(mapping.columns);
++	if (format === 'html') {
++		const tables = descendants(doc, 'table').filter(table => table.attribs['data-table-sync'] === mapping.table);
++		if (tables.length !== 1 || descendants(tables[0], 'table').length) {
++			throw new GenerationError('The output needs one matching HTML table with plain cells.');
++		}
++		const grid = descendants(tables[0], 'tr').map(row => children(row).map(cell => {
++			if (!['td', 'th'].includes(cell.name) || children(cell).length || cell.attribs.colspan || cell.attribs.rowspan) {
++				throw new GenerationError('Merged or formatted HTML output cells cannot be imported.');
++			}
++			return textContent(cell);
++		}));
++		return columnsFromGrid(grid, names);
++	}
++	const find = (node: ElementNode | undefined, keys: string[]) =>
++		keys.reduce<ElementNode | undefined>((parent, key) => parent && children(parent).find(child => child.name === key), node);
++	const root = find(doc, mapping.root?.length ? mapping.root : [mapping.table]);
++	if (!root) throw new GenerationError('The XML output is missing the mapped root element.');
++	return children(root).filter(node => node.name === 'row').map(row =>
++		Object.fromEntries(names.map(name => {
++			const node = find(row, mapping.columns[name].path);
++			return [name, node && textContent(node).trim()];
++		})));
++}
++
++function propertyUnescape(value: string) {
++	return value.replace(/\\(?:u([0-9a-fA-F]{4})|(.))/g, (_match, hex, char) =>
++		hex ? String.fromCharCode(parseInt(hex, 16)) : ({ n: '\n', r: '\r', t: '\t' } as Row)[char] ?? char);
++}
++
++function lineRows(text: string, mapping: TemplateMapping, format: string): Row[] {
++	const rootPath = mapping.root?.length ? mapping.root : [mapping.table];
++	const envName = (s: string) => s.toUpperCase().replace(/[^A-Z0-9_]/g, '_');
++	const root = format === 'env' ? rootPath.map(envName).join('__') : rootPath.join('.');
++	const sep = format === 'env' ? '__' : '.';
++	const paths = new Map(Object.entries(mapping.columns).map(([name, column]) =>
++		[(format === 'env' ? column.path.map(envName) : column.path).join(sep), name]));
++	if (paths.size !== Object.keys(mapping.columns).length) throw new GenerationError('Mapped output column names collide.');
++	const entries: Row[] = [];
++	const indexed = new Map<number, Row>();
++	let active: Row | undefined;
++	for (const raw of text.split(/\r?\n/)) {
++		const line = raw.trim();
++		if (!line || /^[#;!]/.test(line)) continue;
++		if (format === 'toml' && line.startsWith('[')) {
++			active = line === '[[' + root + ']]' ? {} : undefined;
++			if (active) entries.push(active);
++			continue;
++		}
++		if (format === 'ini' && line.startsWith('[')) {
++			const section = line.slice(1, -1);
++			const index = section.startsWith(root + '.') ? section.slice(root.length + 1) : '';
++			active = /^\d+$/.test(index) ? {} : undefined;
++			if (active) indexed.set(Number(index), active);
++			continue;
++		}
++		const equals = line.indexOf('=');
++		if (equals < 0) continue;
++		let key = line.slice(0, equals).trim();
++		let row = active;
++		if (format === 'env' || format === 'properties') {
++			if (!key.startsWith(root + sep)) continue;
++			const parts = key.slice(root.length + sep.length).split(sep);
++			const index = parts.shift() ?? '';
++			if (!/^\d+$/.test(index)) continue;
++			row = indexed.get(Number(index)) ?? {};
++			indexed.set(Number(index), row);
++			key = parts.join(sep);
++		}
++		const name = paths.get(key);
++		if (!row || name === undefined) continue;
++		if (Object.prototype.hasOwnProperty.call(row, name)) throw new GenerationError('Duplicate output field: ' + key);
++		const rawValue = line.slice(equals + 1).trim();
++		row[name] = rawValue.startsWith('"') && format !== 'properties'
++			? JSON.parse(rawValue)
++			: format === 'properties' ? propertyUnescape(rawValue) : rawValue;
++	}
++	return format === 'toml' ? entries : [...indexed].sort(([a], [b]) => a - b).map(([, row]) => row);
++}
++
++function outputRows(output: string, mapping: TemplateMapping, format: string): Row[] {
++	const text = output.replace(/^\uFEFF/, '');
++	const names = Object.keys(mapping.columns);
++	switch (format) {
++		case 'yaml':
++		case 'json': {
++			const value = format === 'json' ? JSON.parse(text) : safeLoad(text);
++			const rows = lookup(value, mapping.root?.length ? mapping.root : [mapping.table]);
++			if (!Array.isArray(rows)) throw new GenerationError('The output is missing the mapped row list.');
++			return rows.map(row => Object.fromEntries(names.map(name => [name, lookup(row, mapping.columns[name].path)])));
++		}
++		case 'csv': return columnsFromGrid(delimited(text, ','), names);
++		case 'tsv': return columnsFromGrid(delimited(text, '\t'), names);
++		case 'xml':
++		case 'html': return markupRows(text, mapping, format);
++		default: return lineRows(text, mapping, format);
++	}
++}
++
++export function canImportMapping(format: string): boolean {
++	return ['yaml', 'json', 'csv', 'tsv', 'xml', 'html', 'toml', 'ini', 'env', 'properties'].includes(format);
++}
++
++export function markdownCell(value: unknown): string {
++	return String(value ?? '').replace(/\|/g, '\\|').replace(/\r\n|\r|\n/g, '<br>');
++}
++
++export function pipeRow(cells: string[]): string {
++	return '| ' + cells.join(' | ') + ' |';
++}
++
++export function importMappedOutput(markdown: string, previousOutput: string, output: string, mapping: TemplateMapping, format: string): string {
++	const old = extractTableRows(markdown, mapping.table, true);
++	const [header, ...rows] = old;
++	const outputData = outputRows(output, mapping, format);
++	const previousData = outputRows(previousOutput, mapping, format);
++	const key = mapping.key;
++	if (key && !mapping.columns[key]) throw new GenerationError('The key column must be mapped to import the output.');
++	const keyed = new Map<string, string[]>();
++	if (key) {
++		for (const row of rows) {
++			const id = row[header.indexOf(key)];
++			if (!id || keyed.has(id)) throw new GenerationError('The source key column must contain unique nonempty IDs.');
++			keyed.set(id, row);
++		}
++	}
++	const seen = new Set<string>();
++	const mapped = outputData.map((row, index) => {
++		const id = key ? String(row[key] ?? '') : '';
++		if (key && (!id || seen.has(id))) throw new GenerationError('The output key column must contain unique nonempty IDs.');
++		seen.add(id);
++		const previous = key ? keyed.get(id) : rows[index];
++		const oldValues = key ? previousData.find(old => String(old[key] ?? '') === id) : previousData[index];
++		return header.map((column, col) => {
++			const definition = Object.prototype.hasOwnProperty.call(mapping.columns, column) ? mapping.columns[column] : undefined;
++			if (!definition) return previous?.[col] ?? '';
++			const value = row[column];
++			if (previous && oldValues && value === oldValues[column]) return previous[col] ?? '';
++			if (value === undefined || (value !== null && typeof value === 'object')) {
++				throw new GenerationError('Missing or invalid output value for ' + column + '.');
++			}
++			if (value === null || value === '') return '';
++			if (definition.type === 'number' && (typeof value === 'boolean' || !Number.isFinite(Number(value)))) {
++				throw new GenerationError('Expected a numeric value for ' + column + '.');
++			}
++			if (definition.type === 'boolean' && !['true', 'false'].includes(String(value))) {
++				throw new GenerationError('Expected true or false for ' + column + '.');
++			}
++			if (definition.type === 'number') return String(Number(value));
++			return format === 'tsv' ? String(value).replace(/\\n/g, '\n') : String(value);
++		});
++	});
++	if (rows.length === mapped.length && JSON.stringify(mapped) === JSON.stringify(rows)) return markdown;
++	// Reject ambiguous empty output for format dialects that cannot distinguish
++	// an empty managed section from a wrong root or a damaged output file.
++	if (!mapped.length && ['toml', 'ini', 'env', 'properties'].includes(format) && rows.length) {
++		throw new GenerationError('No mapped output rows were found.');
++	}
++	const open = '<!-- table-sync:' + mapping.table + ' -->';
++	const close = '<!-- /table-sync:' + mapping.table + ' -->';
++	const start = markdown.indexOf(open) + open.length;
++	const end = markdown.indexOf(close, start);
++	const block = markdown.slice(start, end);
++	const eol = markdown.includes('\r\n') ? '\r\n' : '\n';
++	const lines = block.split(/\r?\n/);
++	const separator = lines.findIndex(line => /^\s*\|?[\s:|-]+\|?\s*$/.test(line) && line.includes('-') &&
++		line.trim().split('|').filter(Boolean).every(cell => /^\s*:?-+:?\s*$/.test(cell)));
++	if (separator < 0) throw new GenerationError('Cannot locate the Markdown table separator.');
++	return markdown.slice(0, start) + [...lines.slice(0, separator + 1), ...mapped.map(row => pipeRow(row.map(markdownCell))), ''].join(eol) + markdown.slice(end);
++}
++
++
++// CKEditor discards HTML comments. Reattach mapping markers to the matching
++// table before writing visual edits back to the Markdown document.
++export function preserveMappingMarkers(previous: string, edited: string): string {
++	const patterns = /^\s*<!-- table-sync:([^\r\n]+?) -->[^\S\r\n]*\r?\n([^\r\n]+)\r?\n/gm;
++	const matches: RegExpExecArray[] = [];
++	for (let match = patterns.exec(previous); match; match = patterns.exec(previous)) {
++		if (!edited.includes('<!-- table-sync:' + match[1] + ' -->')) matches.push(match);
++	}
++	if (!matches.length) return edited;
++	const lines = edited.split('\n');
++	const inserts: Array<{ start: number; end: number; name: string }> = [];
++	for (const [, name, header] of matches) {
++		const columns = JSON.stringify(splitTableCells(header));
++		const candidates = lines.flatMap((line, index) => {
++			if (!line.trimStart().startsWith('|') || JSON.stringify(splitTableCells(line)) !== columns) return [];
++			const separator = lines[index + 1];
++			return separator && splitTableCells(separator).every(cell => /^:?-+:?$/.test(cell)) ? [index] : [];
++		});
++		if (!candidates.length) continue;
++		if (candidates.length !== 1 || inserts.some(insertion => insertion.start === candidates[0])) {
++			throw new GenerationError('Cannot identify the marked table "' + name + '" after editing. Modify its structure in Markdown source.');
++		}
++		const start = candidates[0];
++		let end = start + 2;
++		while (end < lines.length && lines[end].trimStart().startsWith('|')) end++;
++		inserts.push({ start, end, name });
++	}
++	for (const { start, end, name } of inserts.sort((a, b) => b.start - a.start)) {
++		lines.splice(end, 0, '<!-- /table-sync:' + name + ' -->');
++		lines.splice(start, 0, '<!-- table-sync:' + name + ' -->');
++	}
++	return lines.join('\n');
++}
+diff --git a/src/registerMapImport.ts b/src/registerMapImport.ts
+new file mode 100644
+index 0000000000000000000000000000000000000000..f6217a436136a7168be79bd6cfef85186716d0de
+--- /dev/null
++++ b/src/registerMapImport.ts
+@@ -0,0 +1,174 @@
++import { isDeepStrictEqual } from 'util';
++import { GenerationError } from './codeGenerator';
++import {
++	accessDisplay, fieldDisplay, fieldOffset, locateRegisterRows, parseRegisterMapData, rowSubRows,
++	sizeBits, sizeDisplay, splitTableCells, unescapeMarkdownCell
++} from './markdownTables';
++import { markdownCell, pipeRow } from './outputImport';
++
++type Data = Record<string, unknown>;
++
++function record(value: unknown): Data {
++	if (value && typeof value === 'object' && !Array.isArray(value)) return value as Data;
++	throw new GenerationError('The register map contains an invalid object.');
++}
++
++function text(value: unknown): string {
++	if (value === undefined || value === null) return '';
++	if (typeof value !== 'string' && typeof value !== 'number') {
++		throw new GenerationError('The register map contains an invalid cell value.');
++	}
++	return String(value);
++}
++
++function integer(value: unknown): number {
++	const number = typeof value === 'number' ? value : NaN;
++	if (!Number.isSafeInteger(number)) throw new GenerationError('Register sizes and enum values must be integers.');
++	return number;
++}
++
++function htmlCell(value: string): string {
++	return value.replace(/[&<>|\r\n`*_~\[\]]/g, char => '&#' + char.charCodeAt(0) + ';');
++}
++
++function nestedTable(headers: string[], cells: string[][]): string {
++	const row = (type: string, values: string[]) =>
++		'<tr>' + values.map(value => '<' + type + '>' + htmlCell(value) + '</' + type + '>').join('') + '</tr>';
++	return '<table><thead>' + row('th', headers) + '</thead><tbody>' + cells.map(values => row('td', values)).join('') + '</tbody></table>';
++}
++
++function tableRows(name: string, type: Data, previousRows: string[][]): { headers: string[]; cells: string[][] } | undefined {
++	if (type.format === 'enum') {
++		return { headers: ['Value', 'Name'], cells: Object.entries(record(type.values)).map(([label, value]) => [String(integer(value)), label]) };
++	}
++	if (type.format === 'bitfield') {
++		const fields = Object.entries(record(type.fields));
++		const oldNames = previousRows.map(row => row[1]);
++		const sameOffsets = fields.length === previousRows.length && fields.every(([field, value], i) =>
++			fieldDisplay(name, field) === oldNames[i] && integer(record(value).size) === sizeBits(previousRows[i][2]));
++		return {
++			headers: ['Offset', 'Name', 'Size', 'Type', 'Description'],
++			cells: fields.map(([field, value], index) => {
++				const data = record(value);
++				const size = integer(data.size);
++				if (size <= 0) throw new GenerationError('Field sizes must be positive.');
++				const unchanged = sameOffsets ? previousRows[index] : undefined;
++				return [
++					unchanged?.[0] ?? fieldOffset(fields, index),
++					fieldDisplay(name, field),
++					unchanged?.[2] ?? sizeDisplay(data),
++					unchanged?.[3] ?? 'u' + size,
++					text(data.doc)
++				];
++			})
++		};
++	}
++}
++
++function inlineDescription(original: string, changedDoc: string | undefined, changedSub: { headers: string[]; cells: string[][] } | undefined, removeSub: boolean, array: string | undefined) {
++	const start = original.search(/<table\b/i);
++	const end = original.toLowerCase().lastIndexOf('</table>') + '</table>'.length;
++	const hadTable = start >= 0 && end > start;
++	let description = hadTable ? original.slice(0, start) : original;
++	const suffix = hadTable ? original.slice(end) : '';
++	if (changedDoc !== undefined) {
++		const arraySuffix = /\s*—\s*Array:.*$/i.exec(description)?.[0] ?? '';
++		description = htmlCell(changedDoc) + arraySuffix;
++	}
++	if (array !== undefined) {
++		description = description.replace(/\s*—\s*Array:.*$/i, '').trimEnd();
++		if (array) description += (description ? ' ' : '') + array;
++	}
++	if (changedSub) {
++		const separator = description && !/(?:<br\s*\/?\s*>|<\/p>)\s*$/i.test(description) ? '<br>' : '';
++		return description + separator + nestedTable(changedSub.headers, changedSub.cells) + suffix;
++	}
++	return description + (hadTable && !removeSub ? original.slice(start, end) : '') + suffix;
++}
++
++export function importRegisterMap(markdown: string, previousOutput: string, output: string): string {
++	const before = parseRegisterMapData(previousOutput);
++	const after = parseRegisterMapData(output);
++	if (!before || !after) throw new GenerationError('The output must contain a valid register types mapping.');
++	const registers = (data: NonNullable<typeof before>) =>
++		new Map(Object.entries(data.types).filter(([, entry]) => record(entry).format !== 'struct'));
++	const previous = registers(before);
++	const edited = registers(after);
++	if (previous.size !== edited.size || [...previous.keys()].some(name => !edited.has(name))) {
++		throw new GenerationError('Add, remove or rename registers in Markdown, where their offsets are defined.');
++	}
++	const eol = markdown.includes('\r\n') ? '\r\n' : '\n';
++	const lines = markdown.split(/\r?\n/);
++	const located = locateRegisterRows(markdown);
++	const headers = splitTableCells(lines[(located[0]?.line ?? 0) - 2] ?? '');
++	const canonical = ['Offset', 'Word', 'Name', 'Size', 'Format', 'Access', 'Description'];
++	if (!canonical.every(column => headers.includes(column))) throw new GenerationError('Cannot locate the register-map header.');
++	if (located.some((entry, index) => located.findIndex(other => other.row.Name === entry.row.Name) !== index)) {
++		throw new GenerationError('The Markdown register names must be unique.');
++	}
++	for (const { row, line, end, sub } of located.reverse()) {
++		const name = String(row.Name);
++		if (!previous.has(name)) continue;
++		const old = record(previous.get(name));
++		const next = record(edited.get(name));
++		const cells = [...row.cells];
++		const set = (column: string, value: string) => { cells[headers.indexOf(column)] = value; };
++		const changedType = old.format !== next.format;
++		if (changedType) set('Format', markdownCell(text(next.format)));
++		if (next.format !== 'array' && (changedType || old.size !== next.size)) {
++			if (integer(next.size) <= 0) throw new GenerationError('Register sizes must be positive.');
++			set('Size', sizeDisplay(next));
++		}
++		const flags = (data: Data) => data.fpga && record(data.fpga).flags;
++		if (!isDeepStrictEqual(flags(old), flags(next))) {
++			const access = flags(next);
++			if (!Array.isArray(access) || access.some(flag => flag !== 'read' && flag !== 'write')) {
++				throw new GenerationError('Register flags must contain read and/or write.');
++			}
++			set('Access', accessDisplay(access));
++		}
++		const oldDoc = text(old.doc);
++		const doc = oldDoc === text(next.doc) ? undefined : text(next.doc);
++		let array: string | undefined;
++		if (next.format === 'array' && (changedType || next.length !== old.length || next.bit_width !== old.bit_width)) {
++			const length = integer(next.length), width = integer(next.bit_width);
++			if (length <= 0 || width <= 0) throw new GenerationError('Array length and bit width must be positive.');
++			set('Size', length * Math.ceil(width / 8) + ' byte');
++			array = '— Array: ' + length + ' x u' + width + ' (' + Math.ceil(width / 8) + ' byte elements)';
++		} else if (old.format === 'array' && changedType) array = '';
++		const changedSub = changedType || !isDeepStrictEqual(old.fields, next.fields) || !isDeepStrictEqual(old.values, next.values);
++		const oldRows = sub ? sub.dataRows.map(i => splitTableCells(lines[i])) : rowSubRows(row);
++		const replacement = changedSub ? tableRows(name, next, oldRows) : undefined;
++		const attached = Boolean(sub || row.doc?.trim());
++		if (attached) {
++			if (changedSub && (sub || replacement)) {
++				const table = replacement ? [
++					pipeRow(replacement.headers), pipeRow(replacement.headers.map(() => '---')),
++					...replacement.cells.map(values => pipeRow(values.map(markdownCell)))
++				] : [];
++				if (sub) lines.splice(sub.start, sub.end - sub.start, ...table);
++				else {
++					const afterProse = Math.min(end, line + 2 + (row.doc?.trim() ? 1 : 0));
++					lines.splice(afterProse, 0, '', ...table, '');
++				}
++			}
++			if (doc !== undefined) {
++				let first = line + 1;
++				while (first < (sub?.start ?? end) && !lines[first].trim()) first++;
++				let last = first;
++				while (last < (sub?.start ?? end) && !/^[|#]/.test(lines[last].trim())) last++;
++				while (last > first && !lines[last - 1].trim()) last--;
++				const currentDoc = lines.slice(first, last).map(value => unescapeMarkdownCell(value.trim())).filter(Boolean).join(' ');
++				if (oldDoc && currentDoc !== oldDoc) {
++					throw new GenerationError('Cannot safely locate the source description for ' + name + '.');
++				}
++				lines.splice(first, last - first, ...(doc ? doc.split(/\r?\n/) : []));
++			}
++			if (array !== undefined) set('Description', inlineDescription(text(row.Description), undefined, undefined, false, array));
++		} else if (doc !== undefined || changedSub || array !== undefined) {
++			set('Description', inlineDescription(text(row.Description), doc, replacement, changedSub && !replacement, array));
++		}
++		if (!isDeepStrictEqual(cells, row.cells)) lines[line] = pipeRow(cells.map(markdownCell));
++	}
++	return lines.join(eol);
++}
+diff --git a/templates/register-map-to-json.j2 b/templates/register-map-to-json.j2
+index efeaa37176f2f0b3538ff92d2a7347e91d4259a9..2fb10038ca3b1885f49df0de2013919fb773142c 100644
+--- a/templates/register-map-to-json.j2
++++ b/templates/register-map-to-json.j2
+@@ -1,6 +1,7 @@
+ ---
+ name: Register map to JSON
+ format: json
++reverse: register-map
+ struct_name: demoFpgaRegs
+ ---
+ {#-
+diff --git a/templates/register-map-to-yaml.j2 b/templates/register-map-to-yaml.j2
+index 14e04581ae6d9b07fbfacb6177c50c4263b279f5..7a7dc62e29e93576c0e40b77d362917628b6958a 100644
+--- a/templates/register-map-to-yaml.j2
++++ b/templates/register-map-to-yaml.j2
+@@ -1,6 +1,7 @@
+ ---
+ name: Register map to YAML
+ format: yaml
++reverse: register-map
+ struct_name: demoFpgaRegs
+ ---
+ {#-
+diff --git a/tests/jinjaExampleGenerator.test.js b/tests/jinjaExampleGenerator.test.js
+new file mode 100644
+index 0000000000000000000000000000000000000000..9019a85eb030f0bc25dc729d4462a1cf84725fb7
+--- /dev/null
++++ b/tests/jinjaExampleGenerator.test.js
+@@ -0,0 +1,92 @@
++const assert = require('node:assert/strict');
++const { safeLoad } = require('js-yaml');
++const { renderTemplate, splitTemplateFile } = require('../out/jinjaTemplate');
++const { generateJinjaFromExample } = require('../out/jinjaExampleGenerator');
++const { buildMarkdownContext } = require('../out/markdownTables');
++
++const source = '# Ports\n\n| Name | Count |\n| --- | --- |\n| UART | 4 |\n| SPI | 8 |\n';
++const modified = source.replace('# Ports', '# Interfaces') + '| I2C, fast | 12 |\n';
++const filename = 'ports.md';
++const render = (template, text, file = filename) => {
++	const parsed = splitTemplateFile(template);
++	return renderTemplate(parsed.body, { ...buildMarkdownContext(text, file), params: parsed.params });
++};
++
++const csv = 'Name,Count\r\nUART,4\r\nSPI,8\r\n';
++const csvTemplate = generateJinjaFromExample(source, filename, csv, 'board.csv');
++assert.equal(csvTemplate.loop, true);
++assert.equal(render(csvTemplate.template, source), csv);
++assert.equal(render(csvTemplate.template, modified), 'Name,Count\r\nUART,4\r\nSPI,8\r\n"I2C, fast",12\r\n');
++
++const json = JSON.stringify({ title: 'Ports', devices: [{ label: 'UART', pins: 4 }, { label: 'SPI', pins: 8 }] }, null, 2) + '\n';
++const jsonTemplate = generateJinjaFromExample(source, filename, json, 'board.json');
++assert.equal(jsonTemplate.loop, true);
++assert.equal(render(jsonTemplate.template, source), json);
++assert.deepEqual(JSON.parse(render(jsonTemplate.template, modified)), {
++	title: 'Interfaces', devices: [{ label: 'UART', pins: 4 }, { label: 'SPI', pins: 8 }, { label: 'I2C, fast', pins: 12 }]
++});
++
++const yaml = 'title: Ports\ndevices:\n  - label: UART\n    pins: 4\n  - label: SPI\n    pins: 8\n';
++const yamlTemplate = generateJinjaFromExample(source, filename, yaml, 'board.yaml');
++assert.equal(yamlTemplate.loop, true);
++assert.equal(render(yamlTemplate.template, source), yaml);
++assert.equal(safeLoad(render(yamlTemplate.template, modified.replace('I2C, fast', 'I2C: fast'))).devices[2].label, 'I2C: fast');
++
++const structured = '{"devices":[{"bus":"UART","pins":4},{"bus":"SPI","pins":8}]}';
++const template = generateJinjaFromExample(structured, 'ports.json', csv, 'board.csv');
++assert.equal(template.loop, true);
++assert.equal(render(template.template, structured.replace('UART', 'Serial'), 'ports.json'), csv.replace('UART', 'Serial'));
++
++const literal = 'Summary for {Ports}\n\n{{ example }} {% raw %} {# example #}\n';
++const literalTemplate = generateJinjaFromExample(source, filename, literal, 'sample.md');
++assert.equal(render(literalTemplate.template, source), literal);
++assert.equal(render(literalTemplate.template, modified), literal.replace('Ports', 'Interfaces'));
++assert.throws(() => generateJinjaFromExample(source, filename, 'Unrelated content', 'output.txt'), /No unambiguous/);
++assert.throws(() => generateJinjaFromExample(source, filename, 'not valid', 'output.json'), SyntaxError);
++console.log('Jinja example generator: exact examples, changed values, new rows, structured inputs, and literal Jinja delimiters passed');
++
++async function testWizard() {
++	const Module = require('node:module');
++	const path = require('node:path');
++	const uri = name => ({ path: '/examples/' + name, fsPath: '/examples/' + name,
++		toString() { return this.path; } });
++	const samples = new Map([[uri('ports.md').path, source], [uri('board.csv').path, csv]]);
++	const selections = [uri('ports.md'), uri('board.csv')];
++	const destination = uri('ports-conversion.j2');
++	const writes = [];
++	const vscode = {
++		Uri: { joinPath: (base, ...parts) => uri(path.basename(path.join(base.path, ...parts))) },
++		ViewColumn: { Beside: 2 },
++		window: {
++			showOpenDialog: async () => selections.length ? [selections.shift()] : undefined,
++			showSaveDialog: async () => destination,
++			showTextDocument: async selected => assert.equal(selected, destination),
++			showInformationMessage: async () => undefined
++		},
++		workspace: {
++			textDocuments: [],
++			fs: {
++				stat: async file => ({ size: Buffer.byteLength(samples.get(file.path)) }),
++				readFile: async file => Buffer.from(samples.get(file.path)),
++				writeFile: async (file, bytes) => writes.push([file, bytes.toString()])
++			}
++		}
++	};
++	const original = Module._load;
++	let createJinjaTemplate;
++	try {
++		Module._load = function (id, ...args) { return id === 'vscode' ? vscode : original.call(this, id, ...args); };
++		({ createJinjaTemplate } = require('../out/createJinjaTemplate'));
++	} finally {
++		Module._load = original;
++	}
++	const saved = await createJinjaTemplate();
++	assert.equal(saved.path, destination.fsPath);
++	assert.equal(writes.length, 1);
++	assert.equal(writes[0][0], destination);
++	assert.equal(render(writes[0][1], source), csv);
++	assert.equal(await createJinjaTemplate(), undefined);
++	assert.equal(writes.length, 1);
++	console.log('Template wizard: source and expected-file selection, verified save, and cancellation passed');
++}
++testWizard().catch(error => { console.error(error); process.exitCode = 1; });
+diff --git a/tests/markdownToolbar.browser.js b/tests/markdownToolbar.browser.js
+index e1bc0cf09a5762e4fb5393e27264111735fbf855..49e44e127d94d1a34fe0a38b31ca2a2a1b8b24e0 100644
+--- a/tests/markdownToolbar.browser.js
++++ b/tests/markdownToolbar.browser.js
+@@ -8,7 +8,7 @@ const Module = require('node:module');
+ const { chromium } = require('playwright');
+ 
+ const disposable = () => ({ dispose() {} });
+-const uri = fsPath => ({ fsPath, toString: () => fsPath });
++const uri = fsPath => ({ fsPath, scheme: 'file', toString: () => fsPath });
+ const root = path.resolve(__dirname, '..');
+ 
+ async function run(browser, directory) {
+@@ -27,6 +27,12 @@ async function run(browser, directory) {
+ 	}));
+ 
+ 	let handler;
++	const saveListeners = new Set();
++	const onSave = saved => Promise.all([...saveListeners].map(listener => listener(saved)));
++	const outputWatchers = new Set();
++	const warnings = [];
++	let onDispose;
++	let documentMessages = 0;
+ 	let settings = '';
+ 	let nextSelection;
+ 	let dialog;
+@@ -38,17 +44,25 @@ async function run(browser, directory) {
+ 	const commands = [];
+ 	const document = {
+ 		uri: uri(source), fileName: source,
+-		getText: () => text, lineAt: () => ({ range: { start: { line: 0 } } }),
++		getText: () => text,
++		async save() { await fs.writeFile(source, text); await onSave(document); return true; },
++		lineAt: () => ({ range: { start: { line: 0 } } }),
+ 		get lineCount() { return text.split('\n').length; }
+ 	};
+ 	const vscode = {
+ 		Uri: { file: uri, joinPath: (base, ...parts) => uri(path.join(base.fsPath, ...parts)) },
+ 		WorkspaceEdit: class { replace(_uri, _range, replacement) { this.text = replacement; } },
+ 		Range: class {},
++		RelativePattern: class {},
+ 		EndOfLine: { CRLF: 2 },
+ 		ViewColumn: { Beside: 2 },
+ 		ConfigurationTarget: { Global: 1, Workspace: 2 },
+-		commands: { async executeCommand(...args) { commands.push(args); } },
++		commands: { async executeCommand(...args) {
++			commands.push(args);
++			if (args[0] === 'markdownEditor.createJinjaTemplate') {
++				return { sourceUri: document.uri.toString(), path: 'from-examples.j2', name: 'Example-derived template', format: 'json' };
++			}
++		} },
+ 		window: {
+ 			onDidChangeTextEditorVisibleRanges: disposable,
+ 			async showOpenDialog(options) {
+@@ -58,6 +72,8 @@ async function run(browser, directory) {
+ 				return result ? [uri(result)] : undefined;
+ 			},
+ 			showErrorMessage: error => errors.push(error),
++			showWarningMessage: warning => warnings.push(warning),
++			visibleTextEditors: [],
+ 			showInformationMessage() {},
+ 			async showTextDocument() {}
+ 		},
+@@ -75,7 +91,19 @@ async function run(browser, directory) {
+ 			}),
+ 			async applyEdit(edit) { text = edit.text; return true; },
+ 			asRelativePath: target => path.relative(directory, target),
+-			onDidSaveTextDocument: disposable,
++			async openTextDocument(target) { assert.equal(target.fsPath, source); return document; },
++			onDidSaveTextDocument(listener) {
++				saveListeners.add(listener);
++				return { dispose: () => saveListeners.delete(listener) };
++			},
++			createFileSystemWatcher() {
++				let changed;
++				return {
++					onDidChange(listener) { changed = listener; outputWatchers.add(listener); return disposable(); },
++					onDidCreate: disposable,
++					dispose() { outputWatchers.delete(changed); }
++				};
++			},
+ 			onDidChangeTextDocument: disposable,
+ 			onDidChangeConfiguration: disposable
+ 		}
+@@ -102,13 +130,15 @@ async function run(browser, directory) {
+ 		},
+ 		asWebviewUri: target => 'https://editor.test/' + path.relative(root, target.fsPath).split(path.sep).join('/'),
+ 		async postMessage(message) {
++			if (message.type === 'documentChanged') documentMessages++;
+ 			await page.evaluate(data => window.postMessage(data, '*'), message);
+ 			return true;
+ 		},
+ 		onDidReceiveMessage(listener) { handler = listener; return disposable(); }
+ 	};
+ 	const panel = {
+-		webview, active: true, onDidChangeViewState: disposable, onDidDispose: disposable
++		webview, active: true, onDidChangeViewState: disposable,
++		onDidDispose(listener) { onDispose = listener; return disposable(); }
+ 	};
+ 	await new MarkdownEditorProvider({ extensionUri: uri(root) }).resolveCustomTextEditor(document, panel);
+ 	await page.exposeFunction('hostMessage', handler);
+@@ -191,7 +221,26 @@ async function run(browser, directory) {
+ 	text = table;
+ 	settings = '';
+ 	await button('Generate').click();
+-	await waitForFile(path.join(directory, 'defaults/board.cfg'), 'id: UART', true);
++	const mappedOutput = path.join(directory, 'defaults/board.cfg');
++	await waitForFile(mappedOutput, 'id: UART', true);
++	await waitUntil(() => outputWatchers.size === 1);
++	await fs.writeFile(mappedOutput, 'devices:\n  - id: SPI\n');
++	await onSave({ uri: uri(mappedOutput) });
++	await waitUntil(() => text.includes('SPI') || warnings.length > 0);
++	assert.deepEqual(warnings, []);
++	await editableFor(page).locator('td').getByText('SPI', { exact: true }).waitFor();
++	assert.match(await fs.readFile(source, 'utf8'), /\| SPI \|/);
++	await editableFor(page).evaluate(() => window.editor.setData('| ID |\n| --- |\n| I2C |'));
++	await waitUntil(() => text.includes('I2C') || errors.length > 0);
++	assert.match(text, /<!-- table-sync:devices -->[\s\S]*I2C[\s\S]*<!-- \/table-sync:devices -->/);
++
++	const conflictingSource = text + '\nIndependent source edit.\n';
++	text = conflictingSource;
++	await fs.writeFile(mappedOutput, 'devices:\n  - id: CAN\n');
++	for (const notify of outputWatchers) notify(uri(mappedOutput));
++	await waitUntil(() => warnings.some(message => /source also changed/.test(message)));
++	assert.equal(text, conflictingSource);
++	assert.match(await fs.readFile(mappedOutput, 'utf8'), /CAN/);
+ 
+ 	for (const [label, command, args] of [
+ 		['Documentation mind map', 'markdownEditor.documentation.mindmap', []],
+@@ -204,11 +253,90 @@ async function run(browser, directory) {
+ 		assert.deepEqual(commands.find(call => call[0] === command), [command, ...args]);
+ 	}
+ 
++	const editable = editableFor(page);
++	const nested = editable.locator('td table');
++	await editable.evaluate(() => {
++		const editor = window.editor;
++		editor.setData('| Name | Description |\n| --- | --- |\n| UART | Before |\n\nAfter document');
++		const cell = editor.model.document.getRoot().getNodeByPath([0, 1, 1]);
++		editor.model.change(writer => writer.setSelection(cell.getChild(0), 'end'));
++	});
++	await button('Insert table').click();
++	await page.locator('.ck-insert-table-dropdown-grid-box').first().click();
++	await nested.waitFor();
++	await waitUntil(() => /^\|.*UART.*<table[ >]/m.test(text));
++	const messagesBeforeSave = documentMessages;
++	await onSave(document);
++	assert.equal(documentMessages, messagesBeforeSave, 'Auto-save must not echo an edit back to its source panel');
++	await editable.evaluate(() => {
++		const editor = window.editor;
++		editor.model.change(writer => writer.insertText('Inner | **literal** & <tag>', editor.model.document.selection.getFirstPosition()));
++	});
++	await waitUntil(() => text.includes('Inner'));
++	assert.match(text, /^\|.*UART.*<table[ >]/m, 'Store the nested table inside the parent pipe-table row');
++	await fs.writeFile(source, text);
++	await onSave(document);
++	text = await fs.readFile(source, 'utf8');
++	await page.reload();
++	await nested.waitFor();
++	assert.match(await nested.textContent(), /Inner \| \*\*literal\*\* & <tag>/);
++	assert.equal(await editable.locator('> figure.table').count(), 1);
++	assert.match(await editable.textContent(), /After document/);
++
++	await editable.evaluate(() => window.editor.setData(
++		'<table><tr><td><table><tr><td></td></tr></table></td></tr></table>'
++	));
++	await waitUntil(() => /^<table[ >].*<table[ >]/m.test(text));
++	await page.reload();
++	await nested.waitFor();
++	assert.equal(await editable.locator('> figure.table').count(), 1);
++
++	const registerMap = await fs.readFile(path.join(__dirname, 'fixtures/register-map-demo.md'), 'utf8');
++	text = registerMap;
++	await onSave(document);
++	await nested.getByText('DemoBoardA', { exact: true }).waitFor();
++	const roundTripped = await editable.evaluate(() => window.editor.getData());
++	const { buildMarkdownContext, rowDoc, rowSubRows } = require('../out/markdownTables');
++	const original = buildMarkdownContext(registerMap, 'register-map-demo.md');
++	const restored = buildMarkdownContext(roundTripped, 'register-map-demo.md');
++	assert.deepEqual(restored.rows.map(rowSubRows), original.rows.map(rowSubRows));
++	assert.deepEqual(restored.rows.map(rowDoc), original.rows.map(rowDoc));
++
++	const builtinTemplate = path.join(root, 'templates', 'register-map-to-json.j2');
++	nextSelection = builtinTemplate;
++	await button('Template').click();
++	await button('Register map to JSON').waitFor();
++	settings = output;
++	await button('Generate').click();
++	const registerOutput = path.join(output, 'source.json');
++	await waitForFile(registerOutput, '"types"', true);
++	await waitUntil(() => outputWatchers.size === 2);
++	const exported = JSON.parse(await fs.readFile(registerOutput, 'utf8'));
++	exported.types.deviceId.doc = 'Edited from JSON';
++	await fs.writeFile(registerOutput, JSON.stringify(exported, null, 2));
++	await onSave({ uri: uri(registerOutput) });
++	await editable.getByText('Edited from JSON', { exact: true }).waitFor();
++	assert.match(await fs.readFile(source, 'utf8'), /Edited from JSON/);
++
++	await button('Create Jinja template from examples').click();
++	await button('Example-derived template').waitFor();
++	assert.deepEqual(commands.find(args => args[0] === 'markdownEditor.createJinjaTemplate'),
++		['markdownEditor.createJinjaTemplate', document.uri]);
++
+ 	assert.deepEqual(pageErrors, []);
+ 	assert.deepEqual(errors, []);
++	onDispose();
++	exported.types.deviceId.doc = 'Edited after closing Markdown';
++	await fs.writeFile(registerOutput, JSON.stringify(exported, null, 2));
++	for (const notify of outputWatchers) notify(uri(registerOutput));
++	await waitForFile(source, 'Edited after closing Markdown', true);
+ 	await page.close();
+ }
+ 
++function editableFor(page) {
++	return page.locator('.ck-editor__editable_inline');
++}
++
+ async function waitUntil(condition) {
+ 	for (let attempt = 0; attempt < 100; attempt++) {
+ 		if (await condition()) return;
+@@ -232,7 +360,7 @@ async function waitForFile(file, expected, substring = false) {
+ 		const executablePath = process.env.CHROMIUM_EXECUTABLE || await portable?.executablePath();
+ 		browser = await chromium.launch({ executablePath, args: portable?.args || ['--no-sandbox'] });
+ 		await run(browser, directory);
+-		console.log('Markdown toolbar browser test passed: both pickers, format overrides, generation and document actions');
++		console.log('Markdown toolbar browser test passed: both pickers, format overrides, generation, template creation, reverse output saves, conflicts and nested-table save/reload');
+ 	} finally {
+ 		await browser?.close();
+ 		await fs.rm(directory, { recursive: true, force: true });
+diff --git a/tests/outputImport.test.js b/tests/outputImport.test.js
+new file mode 100644
+index 0000000000000000000000000000000000000000..12eb8bdddb67c980836a36bac7b52e9edf2e05ab
+--- /dev/null
++++ b/tests/outputImport.test.js
+@@ -0,0 +1,73 @@
++const assert = require('node:assert/strict');
++const fs = require('node:fs/promises');
++const os = require('node:os');
++const path = require('node:path');
++const { generateFromTemplate } = require('../out/codeGenerator');
++const { importMappedOutput } = require('../out/outputImport');
++const { importRegisterMap } = require('../out/registerMapImport');
++const { buildMarkdownContext, rowDoc, rowSubRows } = require('../out/markdownTables');
++const { splitTemplateFile, renderTemplate } = require('../out/jinjaTemplate');
++const { safeLoad } = require('js-yaml');
++
++async function main() {
++	const dir = await fs.mkdtemp(path.join(os.tmpdir(), 'markdown-output-import-'));
++	try {
++		const mapping = {
++			table: 'devices', root: ['project', 'devices'], key: 'ID',
++			columns: {
++				ID: { path: ['id'], type: 'string' },
++				Label: { path: ['detail', 'label'], type: 'string' },
++				Count: { path: ['count'], type: 'number' },
++				Enabled: { path: ['enabled'], type: 'boolean' }
++			}
++		};
++		const source = '# Intro\n\n<!-- table-sync:devices -->\n| ID | Label | Count | Enabled | Notes |\n| --- | --- | --- | --- | --- |\n| ONE | Old value | 2 | true | Keep this |\n| TWO | Second | 3 | true | Keep this too |\n<!-- /table-sync:devices -->\n\n# End\n';
++		const newOutput = source.replace('Old value | 2 | true', 'New \\| value | 7 | false');
++		for (const format of ['yaml', 'json', 'toml', 'xml', 'csv', 'tsv', 'ini', 'env', 'properties', 'html']) {
++			const file = path.join(dir, 'test.' + format);
++			await generateFromTemplate(mapping, source, format, file);
++			const before = await fs.readFile(file, 'utf8');
++			await generateFromTemplate(mapping, newOutput, format, file);
++			const after = await fs.readFile(file, 'utf8');
++			assert.equal(importMappedOutput(source, before, after, mapping, format), newOutput, format);
++			assert.equal(importMappedOutput(source, before, before, mapping, format), source, format);
++		}
++		const before = '{"project":{"devices":[{"id":"ONE","detail":{"label":"Old value"},"count":2,"enabled":true},{"id":"TWO","detail":{"label":"Second"},"count":3,"enabled":true}]}}';
++		const output = '{"project":{"devices":[{"id":"TWO","detail":{"label":"Edited"},"count":3,"enabled":true},{"id":"THREE","detail":{"label":"New"},"count":1,"enabled":false}]}}';
++		const merged = importMappedOutput(source, before, output, mapping, 'json');
++		assert.match(merged, /\| TWO \| Edited \| 3 \| true \| Keep this too \|/);
++		assert.match(merged, /\| THREE \| New \| 1 \| false \|  \|/);
++		assert.doesNotMatch(merged, /\| ONE \|/);
++		assert.throws(() => importMappedOutput(source, before, '{}', mapping, 'json'), /missing the mapped row list/);
++
++		for (const [file, format, name, field] of [
++			['register-map-demo.md', 'json', 'controlWord', 'enable'],
++			['pab1-register-map.md', 'yaml', 'firmwareVersion', 'minorVersion']
++		]) {
++			const original = await fs.readFile(path.join(__dirname, 'fixtures', file), 'utf8');
++			const template = await fs.readFile(path.join(__dirname, '..', 'templates', 'register-map-to-' + format + '.j2'), 'utf8');
++			const { body, params } = splitTemplateFile(template);
++			const baseline = renderTemplate(body, { ...buildMarkdownContext(original, file), params });
++			const data = format === 'yaml' ? safeLoad(baseline) : JSON.parse(baseline);
++			const target = data.types[name];
++			target.doc = 'Updated register | description';
++			target.fpga.flags = ['read'];
++			target.fields[field].doc = 'Updated field | description';
++			const revised = importRegisterMap(original, baseline, JSON.stringify(data));
++			const rows = buildMarkdownContext(revised, file).rows;
++			const initial = buildMarkdownContext(original, file).rows;
++			const row = rows.find(item => item.Name === name);
++			assert.equal(rowDoc(row), 'Updated register | description', file);
++			assert.equal(row.Access, 'R');
++			assert.equal(rowSubRows(row).find(parts => parts[1] === field)[4], 'Updated field | description', file);
++			assert.deepEqual(rows.map(item => item.Offset), initial.map(item => item.Offset), file);
++			assert.equal(importRegisterMap(original, baseline, baseline), original, file);
++			delete data.types[name];
++			assert.throws(() => importRegisterMap(original, baseline, JSON.stringify(data)), /offsets/);
++		}
++		console.log('Reverse output: ten mapped text formats, row identity, malformed data, and both register-map styles passed');
++	} finally {
++		await fs.rm(dir, { recursive: true, force: true });
++	}
++}
++main().catch(error => { console.error(error); process.exitCode = 1; });

@@ -1,3 +1,4 @@
+import { createJinjaTemplate } from './createJinjaTemplate';
 import {ProjectListening} from './projectListening';
 import {LocalAssistant} from './localAssistant';
 import {DocumentLoader} from './documentLoader';
@@ -82,6 +83,14 @@ export function activate(context: vscode.ExtensionContext) {
 	function registerCommand(command: string, callback: (...args: any[]) => any) {
 		context.subscriptions.push(vscode.commands.registerCommand(command, callback));
 	}
+
+	registerCommand('markdownEditor.createJinjaTemplate', async (source?: vscode.Uri) => {
+		try {
+			return await createJinjaTemplate(source ?? vscode.window.activeTextEditor?.document.uri);
+		} catch (error) {
+			void vscode.window.showErrorMessage('Markdown Editor: ' + (error instanceof Error ? error.message : String(error)));
+		}
+	});
 
 	registerCommand('markdownEditor.openCustomEditor', async (uri: vscode.Uri) => {
 		// Sanity check. These cases shouldn't happen

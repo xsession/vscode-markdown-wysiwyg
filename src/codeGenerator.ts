@@ -2,9 +2,7 @@
 // *.table-template.json mapping and writes the generated output file in the
 // selected format. See TEMPLATE-SYNC.md for the mapping schema.
 //
-// Scope of this build: fresh generation with a .table-sync.bak backup of any
-// existing output. Merge/import (reading the generated file back into the
-// Markdown) and template-based DOCX surgery are not implemented yet.
+// Generation creates a .table-sync.bak backup of any existing output.
 import * as path from 'path';
 
 export class GenerationError extends Error {}
@@ -48,7 +46,7 @@ export function extensionForFormat(format: string): string {
 }
 
 /** Extract the marked table as [headerRow, ...dataRows] of raw cell strings. */
-export function extractTableRows(markdown: string, table: string): string[][] {
+export function extractTableRows(markdown: string, table: string, allowEmpty = false): string[][] {
 	const open = '<!-- table-sync:' + table + ' -->';
 	const close = '<!-- /table-sync:' + table + ' -->';
 	const start = markdown.indexOf(open);
@@ -61,7 +59,7 @@ export function extractTableRows(markdown: string, table: string): string[][] {
 		.split(/\r?\n/)
 		.map((line) => line.trim())
 		.filter((line) => line.length > 0);
-	if (lines.length < 3 || !/^\|?[\s:|-]+\|?$/.test(lines[1])) {
+	if (lines.length < (allowEmpty ? 2 : 3) || !/^\|?[\s:|-]+\|?$/.test(lines[1])) {
 		throw new GenerationError('The "' + table + '" block needs a header row, a separator row and at least one data row.');
 	}
 	const parseRow = (line: string): string[] => {
@@ -102,9 +100,6 @@ export function buildRows(mapping: TemplateMapping, rows: string[][]): Record<st
 	}
 	if (mapping.key && colIndex[mapping.key] === undefined) {
 		throw new GenerationError('The Markdown table is missing the key column "' + mapping.key + '".');
-	}
-	if (rows.length < 2) {
-		throw new GenerationError('The "' + mapping.table + '" table has no data rows.');
 	}
 	return rows.slice(1).map((cells) => {
 		const row: Record<string, unknown> = {};
@@ -423,7 +418,7 @@ export async function generateFromTemplate(
 	if (!EXTENSIONS[name]) {
 		throw new GenerationError('Unknown output format: ' + format);
 	}
-	const rows = extractTableRows(markdown, mapping.table);
+	const rows = extractTableRows(markdown, mapping.table, true);
 	const data = buildRows(mapping, rows);
 	const fs = require('fs');
 	const dir = path.dirname(outAbs);

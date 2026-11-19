@@ -15,6 +15,28 @@ Generate button ──▶ TypeScript renderer (src/jinjaTemplate.ts)
                   output  ──▶ <output folder>/<name>.<ext>
 ```
 
+## Create a template from examples
+
+Click **Create Jinja template from examples** in the editor toolbar or run
+**Markdown Editor: Create Jinja Template from Examples** in the Command
+Palette. Select the source example, select the expected output example, then
+choose where to save the `.j2` template. The extension renders the inferred
+template with your source and checks that it reproduces the expected text
+before opening the save dialog.
+
+The generator matches source values to the expected text. It recognizes
+Markdown headings and table cells, plus fields in JSON and YAML inputs. Two
+or more matching records can produce a row loop. Use different values across
+rows to distinguish columns, and check the result with a second example
+before relying on it for a different document. Content with no identifiable
+source match stays literal. Add calculated transformations or reverse sync
+rules by editing the generated template.
+
+If you create the template from the Markdown file open in the toolbar, the
+editor selects the new template automatically. Choose an output folder and
+press **Generate** to run it. The example's filename supplies the default
+output name.
+
 ## Template file format
 
 An optional YAML front matter, then the Jinja body:
@@ -193,9 +215,24 @@ documents stay linked for that editor session:
    the output editor to the section and selects it** — you see the effect of
    your edit exactly where it landed.
 
-If the output file has unsaved user edits the rewrite is skipped (the reveal
-still happens, against the on-disk content) so manual edits are never
-clobbered. `docx` has no live sync (binary format, no template output).
+Saving YAML or JSON generated with the bundled register-map templates sends
+supported edits back to the original Markdown. It updates existing register
+cells and field/enum tables while keeping the register offsets and surrounding
+document. Add, remove, or rename registers in Markdown, where their offsets
+are defined. Output-only metadata such as code generation settings has no
+Markdown counterpart.
+
+The link survives closing the Markdown tab for the current VS Code window.
+If both sides changed, the extension keeps both files and reports the conflict.
+An invalid output is left in place for correction. Generate again to establish
+a link after restarting VS Code. Generate is an explicit Markdown-to-output
+operation and can replace the destination.
+
+Custom templates can opt into reverse sync with `reverse: relative/path.j2`
+in the forward template's front matter. That template receives the edited
+output as `markdown`, the original source as `original_markdown`, and the
+last synchronized output as `previous_output`. Its result replaces the source
+Markdown, so it should include any source content that must be preserved.
 
 ## Writing a new template
 

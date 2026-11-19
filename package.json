@@ -26,6 +26,7 @@
   "activationEvents": [
     "onCustomEditor:markdownEditor.customEditor",
     "onCommand:markdownEditor.openCustomEditor",
+    "onCommand:markdownEditor.createJinjaTemplate",
     "onCommand:markdownEditor.readAloud",
     "onCommand:markdownEditor.readSelection",
     "onCommand:markdownEditor.listeningGuide",
@@ -65,6 +66,11 @@
       }
     ],
     "commands": [
+      {
+        "command": "markdownEditor.createJinjaTemplate",
+        "title": "Markdown Editor: Create Jinja Template from Examples",
+        "icon": "$(file-code)"
+      },
       {
         "command": "markdownEditor.openCustomEditor",
         "title": "Open WYSIWYG Editor",
@@ -429,7 +435,7 @@
     "webpack-dev": "npm run build:editor && webpack --mode development --watch",
     "test-compile": "tsc -p ./",
     "lint": "eslint . --ext .ts,.tsx",
-    "test": "npm run test-compile && node tests/speechText.test.js && node tests/listeningDocument.test.js && node tests/speechEngine.test.js && node tests/piperReader.test.js && node tests/voiceManager.test.js && node tests/documentationIndex.test.js && node tests/documentationExplorer.test.js && node tests/documentFormats.test.js && node tests/documentLoader.test.js && node tests/listeningWorkspace.test.js && node tests/projectListening.test.js && node tests/localAssistant.test.js && node tests/jinjaTemplate.test.js",
+    "test": "npm run test-compile && node tests/speechText.test.js && node tests/listeningDocument.test.js && node tests/speechEngine.test.js && node tests/piperReader.test.js && node tests/voiceManager.test.js && node tests/documentationIndex.test.js && node tests/documentationExplorer.test.js && node tests/documentFormats.test.js && node tests/documentLoader.test.js && node tests/listeningWorkspace.test.js && node tests/projectListening.test.js && node tests/localAssistant.test.js && node tests/jinjaTemplate.test.js && node tests/outputImport.test.js && node tests/jinjaExampleGenerator.test.js",
     "voices:bundle": "python scripts/bundle_voices.py",
     "voices:verify": "node scripts/verify-voices.js",
     "runtime:verify": "node scripts/verify-runtime.js",

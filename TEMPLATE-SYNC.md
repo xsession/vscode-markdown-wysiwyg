@@ -8,20 +8,14 @@ Generate editable files from a Markdown table and synchronize saved edits back t
 
 ## Start
 
-1. Open your project folder in VS Code and trust it.
-2. Run **Markdown Editor: Create table template (10 formats)** and select a format.
-3. Save the `.table-template.json` file. It defines the source Markdown, destination path, field names and types. An example `devices.md` is created alongside it unless that file already exists.
-4. Edit the template to match your project and save all relevant buffers.
-5. Run **Generate output from Markdown (10 formats)** and choose the template. This explicitly chooses Markdown as the source, including when the output already exists.
-6. Edit and save either file. The other updates automatically while the extension is active. Use **Import output into Markdown (10 formats)** to explicitly choose the generated file as the source. **Synchronize template table** chooses automatically when a baseline is available.
-
-A sync button appears in supported editor titles. Templates without `format` continue to infer their format from the output extension; existing YAML templates keep working. `.yml`, `.htm`, `.env` and `.env.local` are recognized. An explicit `format` also supports custom extensions such as `board.cfg`.
-
-Paths are relative to the template file. Absolute paths and `../` are supported for custom destinations. Parent folders are created. Workspace output files are watched for external edits. An output outside the workspace synchronizes when saved in this VS Code window or using the manual command.
+1. Open the source Markdown in the WYSIWYG editor.
+2. Choose the `.table-template.json` mapping with **Template**, then click **Generate**.
+3. Open the generated file at the mapping's path or the toolbar's selected destination. Edit it and save. The extension imports the mapped values into the Markdown file named in the mapping. Unmapped columns in Markdown stay with their existing row IDs when a key is configured.
+4. If Markdown and the destination have both changed, compare the files before generating again. The reverse link lasts for the current VS Code window, including when the source tab is closed.
 
 ## Included formats and examples
 
-Each example directory contains a Markdown source, template, and actual generated output. Because the example outputs already exist, run Generate or Import once to establish the source direction.
+The table shows the layout expected for generated outputs and reverse import. Generate establishes the link used to import future saves.
 
 | Format | Example directory | Managed structure | Preservation |
 | --- | --- | --- | --- |
@@ -90,10 +84,10 @@ Only the marked table changes in Markdown. Unmapped Markdown columns survive for
 
 ## Conflicts and recovery
 
-A baseline is persisted per workspace/template. If both files change, synchronization stops. Compare the files, then explicitly choose Generate or Import to select which side wins. These commands intentionally replace managed values on the other side. Existing output without a baseline, or any changed template, requires the same choice. Save the source, destination and template before sync; dirty buffers prevent writes. Watcher bursts are batched and sync operations run in order.
+Each Generate establishes a baseline for the selected output in the current VS Code window. A dirty or independently changed Markdown source pauses reverse sync. Watcher bursts are batched and operations for the same file run in order. Generate explicitly chooses Markdown as the source and rewrites the destination.
 
-Use one owner per output and marked table to avoid competing mappings. File deletion is not imported as row deletion. For deletion of all records, retain a valid empty table/list in the output. Validation failures stop writes. Workspace trust is required and templates execute no scripts. The operation is not a distributed filesystem transaction; keep source control for recovery when other applications edit the same files concurrently.
+Use one owner per output and marked table to avoid competing mappings. File deletion is not imported as row deletion. For deletion of all records, retain a valid empty table/list in the output. Validation failures stop writes.  The operation is not a distributed filesystem transaction; keep source control for recovery when other applications edit the same files concurrently.
 
 ## Build and verification
 
-Run `build.bat` to build with the existing offline asset workflow. Tests cover all ten adapters, actual output text edits, multiline and escaped values, Unicode, extra-field retention, row add/delete/reorder, automatic save and watcher events, persisted baselines, conflict refusal, workspace trust and dirty buffers. Tests run on Linux with VS Code API fixtures; native Windows/VS Code GUI execution remains unverified.
+Run `build.bat` to build with the existing offline asset workflow. Tests cover all ten adapters, edited output values, escaped pipes, row identity, automatic save handling, file watcher conflicts and both register-map layouts. Tests run on Linux with VS Code API fixtures; native Windows/VS Code GUI execution remains unverified.

@@ -680,7 +680,15 @@ function csvQuote(s: string): string {
 }
 
 function tsvQuote(s: string): string {
-	return /[	\r\n]/.test(s) ? '"' + s.replace(/"/g, '""') + '"' : s;
+	return /[	"\r\n]/.test(s) ? '"' + s.replace(/"/g, '""') + '"' : s;
+}
+
+// A plain scalar keeps the sample's spelling. Quote new values that would
+// otherwise become YAML syntax or acquire a different type.
+export function yamlScalar(value: unknown): string {
+	if (typeof value !== 'string') return JSON.stringify(value ?? null);
+	if (/^[A-Za-z_][A-Za-z0-9_./ -]*$/.test(value) && value.trimEnd() === value && yamlSafeLoad(value) === value) return value;
+	return JSON.stringify(value);
 }
 
 function makeFilters(): Record<string, FilterFn> {
@@ -740,9 +748,10 @@ function makeFilters(): Record<string, FilterFn> {
 		table_rows: (v) => parseTableRows(String(v ?? '')),
 		// YAML double-quoted scalar (JSON string escaping is valid YAML).
 		yaml_q: (v) => JSON.stringify(String(v ?? '')),
+		yaml_scalar: yamlScalar,
 		// RFC 4180 CSV field: quoted when it contains a comma, quote or newline.
 		csv_q: (v) => csvQuote(String(v ?? '')),
-		// TSV field: quoted when it contains a tab or newline.
+		// TSV field: quoted when it contains a tab, quote or newline.
 		tsv_q: (v) => tsvQuote(String(v ?? '')),
 		// XML text/attribute escaping (& first, then < > ").
 		xml_escape: (v) =>

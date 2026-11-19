@@ -1,15 +1,17 @@
+import type { CreatedTemplate } from './createJinjaTemplate';
 import * as path from 'path';
 import * as fs from 'fs';
 import * as vscode from 'vscode';
 import { extensionState } from './extension';
 import { generateFromTemplate, extensionForFormat, GenerationError, TemplateMapping } from './codeGenerator';
+import { canImportMapping, importMappedOutput, preserveMappingMarkers } from './outputImport';
+import { importRegisterMap } from './registerMapImport';
 import { renderTemplate, splitTemplateFile, TemplateError } from './jinjaTemplate';
 import {
 	buildMarkdownContext,
 	fingerprintsFromDocument,
 	diffFingerprints,
-	findRegisterSpan,
-	Fingerprint
+	findRegisterSpan
 } from './markdownTables';
 
 const prettier = require('prettier');
@@ -74,6 +76,22 @@ function currentOutputFolder(): string {
 	return root ? path.join(root, configured) : configured;
 }
 
+interface OutputLink {
+	sourcePath: string;
+	outputAbs: string;
+	format: string;
+	sourceBaseline: string;
+	outputBaseline: string;
+	templatePath?: string;
+	reverse?: (markdown: string, previous: string, output: string) => string | Promise<string>;
+	watcher?: vscode.FileSystemWatcher;
+	saveSubscription?: vscode.Disposable;
+	forwardTimer?: NodeJS.Timeout;
+	reverseTimer?: NodeJS.Timeout;
+	queue: Promise<void>;
+	disposed: boolean;
+}
+
 export class MarkdownEditorProvider implements vscode.CustomTextEditorProvider {
 	public static register(context: vscode.ExtensionContext): vscode.Disposable {
 		const provider = new MarkdownEditorProvider(context);
@@ -84,85 +102,157 @@ export class MarkdownEditorProvider implements vscode.CustomTextEditorProvider {
 				webviewOptions: { retainContextWhenHidden: true },
 			}
 		);
-		return providerRegistration;
+		return vscode.Disposable.from(providerRegistration, { dispose: () => provider.disposeLinks() });
 	}
 
 	static readonly viewType = 'markdownEditor.customEditor';
 
 	constructor(private readonly context: vscode.ExtensionContext) {}
 
-	// Live input -> output link: after a Jinja generation, editing a section
-	// in the open document re-renders the output file and scrolls the output
-	// editor to that section (see liveSync / doLiveSync).
-	private liveSessions = new Map<
-		vscode.WebviewPanel,
-		{ templatePath: string; outputAbs: string; format: string; fingerprints: Fingerprint[] }
-	>();
-	private liveSyncTimers = new Map<vscode.WebviewPanel, NodeJS.Timeout>();
+	private readonly liveSessions = new Map<vscode.WebviewPanel, OutputLink>();
+	private readonly outputLinks = new Map<string, OutputLink>();
 
-	// Debounced: one live re-render per burst of keystrokes per editor.
-	private liveSync(webviewPanel: vscode.WebviewPanel, document: vscode.TextDocument): void {
-		if (!this.liveSessions.has(webviewPanel)) return;
-		const pending = this.liveSyncTimers.get(webviewPanel);
-		if (pending) clearTimeout(pending);
-		this.liveSyncTimers.set(
-			webviewPanel,
-			setTimeout(() => {
-				this.liveSyncTimers.delete(webviewPanel);
-				const session = this.liveSessions.get(webviewPanel);
-				if (session) void this.doLiveSync(session, document);
-			}, 400)
-		);
+	private stopLink(link: OutputLink): void {
+		link.disposed = true;
+		if (link.forwardTimer) clearTimeout(link.forwardTimer);
+		if (link.reverseTimer) clearTimeout(link.reverseTimer);
+		link.watcher?.dispose();
+		link.saveSubscription?.dispose();
+		this.outputLinks.delete(link.outputAbs);
+		for (const [panel, active] of this.liveSessions) {
+			if (active === link) this.liveSessions.delete(panel);
+		}
 	}
 
-	private async doLiveSync(
-		session: { templatePath: string; outputAbs: string; format: string; fingerprints: Fingerprint[] },
-		document: vscode.TextDocument
-	): Promise<void> {
-		try {
-			const text = document.getText();
-			const newFingerprints = fingerprintsFromDocument(text);
-			const changed = diffFingerprints(session.fingerprints, newFingerprints);
-			if (changed === null) return; // nothing section-visible changed
+	private disposeLinks(): void {
+		for (const link of this.outputLinks.values()) this.stopLink(link);
+	}
 
-			// Render the template against the current document text.
-			const raw = await fs.promises.readFile(session.templatePath, 'utf8');
-			const { params, body } = splitTemplateFile(raw);
-			const context = buildMarkdownContext(text, path.basename(document.fileName));
-			context.params = params;
-			const output = renderTemplate(body, context);
+	private async releaseOutput(output: string): Promise<void> {
+		const link = this.outputLinks.get(path.resolve(output));
+		if (!link) return;
+		this.stopLink(link);
+		await link.queue;
+	}
 
-			// Never clobber unsaved user edits in the output file.
-			const outDoc = vscode.workspace.textDocuments.find((d) => d.uri.fsPath === session.outputAbs);
-			const skipWrite = outDoc ? outDoc.isDirty : false;
-			let shown = output;
-			if (skipWrite) {
-				try {
-					shown = await fs.promises.readFile(session.outputAbs, 'utf8');
-				} catch {
-					shown = output;
-				}
-			} else {
-				await fs.promises.mkdir(path.dirname(session.outputAbs), { recursive: true });
-				await fs.promises.writeFile(session.outputAbs, output, 'utf8');
-			}
+	private startLink(panel: vscode.WebviewPanel, config: Omit<OutputLink, 'queue' | 'disposed'>): void {
+		const previous = this.outputLinks.get(config.outputAbs);
+		if (previous) this.stopLink(previous);
+		const active = this.liveSessions.get(panel);
+		if (active && !active.reverse) this.stopLink(active);
+		else if (active?.forwardTimer) clearTimeout(active.forwardTimer);
+		const link: OutputLink = { ...config, queue: Promise.resolve(), disposed: false };
+		this.liveSessions.set(panel, link);
+		this.outputLinks.set(link.outputAbs, link);
+		if (!link.reverse) return;
 
-			session.fingerprints = newFingerprints;
+		const pattern = new vscode.RelativePattern(path.dirname(link.outputAbs), '*');
+		link.watcher = vscode.workspace.createFileSystemWatcher(pattern, false, false, true);
+		const handle = (uri: vscode.Uri) => {
+			if (uri.fsPath !== link.outputAbs) return;
+			if (link.reverseTimer) clearTimeout(link.reverseTimer);
+			link.reverseTimer = setTimeout(() => {
+				void this.queueLink(link, () => this.importOutput(link));
+			}, 300);
+		};
+		link.watcher.onDidChange(handle);
+		link.watcher.onDidCreate(handle);
+		link.saveSubscription = vscode.workspace.onDidSaveTextDocument(saved => {
+			if (saved.uri.fsPath === link.outputAbs) handle(saved.uri);
+		});
+	}
 
-			// Scroll the output editor to the changed section and select it.
-			const span = findRegisterSpan(shown, session.format, changed);
-			if (!span) return; // section removed — the file was still updated
-			const editor = vscode.window.visibleTextEditors.find(
-				(ed) => ed.document.uri.fsPath === session.outputAbs
-			);
-			if (!editor) return;
-			const endLine = Math.min(span.end, editor.document.lineCount - 1);
-			const range = new vscode.Range(span.start, 0, endLine, 0);
-			editor.selection = new vscode.Selection(range.start, range.end);
-			editor.revealRange(range, vscode.TextEditorRevealType.InCenterIfOutsideViewport);
-		} catch (err) {
-			console.warn('Markdown Editor: live sync skipped:', err);
+	private queueLink(link: OutputLink, operation: () => Promise<void>): Promise<void> {
+		const run = link.queue.then(async () => {
+			if (!link.disposed) await operation();
+		});
+		link.queue = run.catch(err => {
+			if (!link.disposed) void vscode.window.showWarningMessage('Markdown Editor: ' + (err instanceof Error ? err.message : String(err)));
+		});
+		return link.queue;
+	}
+
+	private async importOutput(link: OutputLink): Promise<void> {
+		if (!link.reverse) return;
+		const outputDocument = vscode.workspace.textDocuments.find(doc => doc.uri.fsPath === link.outputAbs);
+		if (outputDocument?.isDirty) return;
+		const output = await fs.promises.readFile(link.outputAbs, 'utf8');
+		if (output === link.outputBaseline) return;
+
+		const source = await vscode.workspace.openTextDocument(vscode.Uri.file(link.sourcePath));
+		if (source.isDirty || source.getText() !== link.sourceBaseline) {
+			throw new GenerationError('Output sync paused because the Markdown source also changed. Both files were kept.');
 		}
+		const markdown = await link.reverse(link.sourceBaseline, link.outputBaseline, output);
+		if (link.disposed || source.isDirty || source.getText() !== link.sourceBaseline || outputDocument?.isDirty ||
+			await fs.promises.readFile(link.outputAbs, 'utf8') !== output) return;
+		if (link.disposed || source.isDirty || source.getText() !== link.sourceBaseline) return;
+
+		if (markdown !== link.sourceBaseline) {
+			const edit = new vscode.WorkspaceEdit();
+			edit.replace(source.uri, new vscode.Range(0, 0, source.lineCount, 0), markdown);
+			if (!(await vscode.workspace.applyEdit(edit))) throw new GenerationError('Could not apply output changes to Markdown.');
+			if (source.getText() !== markdown || !(await source.save())) throw new GenerationError('Output changes are in the Markdown editor. Save the source to finish syncing.');
+			link.sourceBaseline = source.getText();
+		}
+		link.outputBaseline = output;
+	}
+
+	private liveSync(panel: vscode.WebviewPanel, document: vscode.TextDocument): void {
+		const link = this.liveSessions.get(panel);
+		if (!link?.templatePath || document.uri.fsPath !== link.sourcePath) return;
+		if (link.forwardTimer) clearTimeout(link.forwardTimer);
+		link.forwardTimer = setTimeout(() => {
+			void this.queueLink(link, () => this.doLiveSync(link, document));
+		}, 400);
+	}
+
+	private async doLiveSync(link: OutputLink, document: vscode.TextDocument): Promise<void> {
+		const source = document.getText();
+		if (source === link.sourceBaseline || !link.templatePath) return;
+		const outputDocument = vscode.workspace.textDocuments.find(doc => doc.uri.fsPath === link.outputAbs);
+		if (outputDocument?.isDirty) return;
+		if (await fs.promises.readFile(link.outputAbs, 'utf8') !== link.outputBaseline) {
+			throw new GenerationError('Output sync paused because the generated file also changed. Both files were kept.');
+		}
+		const { params, body } = splitTemplateFile(await fs.promises.readFile(link.templatePath, 'utf8'));
+		const context = buildMarkdownContext(source, path.basename(document.fileName));
+		context.params = params;
+		const output = renderTemplate(body, context);
+		if (link.disposed || outputDocument?.isDirty || document.getText() !== source) return;
+		if (await fs.promises.readFile(link.outputAbs, 'utf8') !== link.outputBaseline ||
+			link.disposed || outputDocument?.isDirty || document.getText() !== source) return;
+		const changed = diffFingerprints(fingerprintsFromDocument(link.sourceBaseline), fingerprintsFromDocument(source));
+		if (output !== link.outputBaseline) {
+			await fs.promises.writeFile(link.outputAbs, output, 'utf8');
+			link.outputBaseline = output;
+		}
+		link.sourceBaseline = source;
+		const span = changed && findRegisterSpan(output, link.format, changed);
+		const editor = vscode.window.visibleTextEditors.find(ed => ed.document.uri.fsPath === link.outputAbs);
+		if (!span || !editor) return;
+		const range = new vscode.Range(span.start, 0, Math.min(span.end, editor.document.lineCount - 1), 0);
+		editor.selection = new vscode.Selection(range.start, range.end);
+		editor.revealRange(range, vscode.TextEditorRevealType.InCenterIfOutsideViewport);
+	}
+
+	private reverseJinja(templatePath: string, format: string, reverse: string | undefined): OutputLink['reverse'] {
+		const bundled = /^(?:register-map-to-yaml|register-map-to-json)\.(?:j2|jinja|jnt)$/i.test(path.basename(templatePath));
+		if ((reverse === 'register-map' || (!reverse && bundled)) && ['yaml', 'json'].includes(format)) {
+			return importRegisterMap;
+		}
+		if (!reverse || reverse === 'register-map') return undefined;
+		const reversePath = path.resolve(path.dirname(templatePath), reverse);
+		return async (markdown, previous, output) => {
+			const { params, body } = splitTemplateFile(await fs.promises.readFile(reversePath, 'utf8'));
+			const context = buildMarkdownContext(output, 'generated.' + extensionForFormat(format));
+			context.params = params;
+			context.original_markdown = markdown;
+			context.previous_output = previous;
+			const result = renderTemplate(body, context);
+			if (!result.trim()) throw new GenerationError('The reverse template returned empty Markdown.');
+			return result;
+		};
 	}
 
 	private sendOutputFolder(webviewPanel: vscode.WebviewPanel) {
@@ -231,8 +321,15 @@ export class MarkdownEditorProvider implements vscode.CustomTextEditorProvider {
 		});
 	}
 
-	private async executeDocumentCommand(document: vscode.TextDocument, command: string) {
+	private async executeDocumentCommand(document: vscode.TextDocument, command: string, panel: vscode.WebviewPanel) {
 		switch (command) {
+			case 'markdownEditor.createJinjaTemplate': {
+				const template = await vscode.commands.executeCommand<CreatedTemplate | undefined>(command, document.uri);
+				if (template?.sourceUri === document.uri.toString()) {
+					await panel.webview.postMessage({ type: 'templatePicked', kind: 'jinja', ...template });
+				}
+				break;
+			}
 			case 'markdownEditor.documentation.mindmap':
 				await vscode.commands.executeCommand(command);
 				break;
@@ -298,17 +395,22 @@ export class MarkdownEditorProvider implements vscode.CustomTextEditorProvider {
 		// Remember that a single text document can also be shared between multiple custom
 		// editors (this happens for example when you split a custom editor)
 
+		let pendingEdit = Promise.resolve();
+		let synchronizedText: string | undefined;
+
 		function updateWebview() {
-			let text = document.getText();
-
+			synchronizedText = document.getText();
 			// CKEditor uses LF internally.
-			text = text.replace(/(?:\r\n|\r|\n)/g, '\n');
-
-			webviewPanel.webview.postMessage({ type: 'documentChanged', text: text });
+			const text = synchronizedText.replace(/(?:\r\n|\r|\n)/g, '\n');
+			webviewPanel.webview.postMessage({ type: 'documentChanged', text });
 		}
 
-		const saveDocumentSubscription = vscode.workspace.onDidSaveTextDocument((saved) => {
-			if (saved === document) updateWebview();
+		const saveDocumentSubscription = vscode.workspace.onDidSaveTextDocument(async (saved) => {
+			if (saved !== document) return;
+			await pendingEdit;
+			// The editor already contains edits it sent. Replacing them on
+			// auto-save risks resetting the selection and undo history.
+			if (document.getText() !== synchronizedText) updateWebview();
 		});
 
 		const onDidChangeOutputFolder = vscode.workspace.onDidChangeConfiguration((e) => {
@@ -326,22 +428,23 @@ export class MarkdownEditorProvider implements vscode.CustomTextEditorProvider {
 						console.log('markdownEditor.editorIsActive', false);
 					});
 			}
-			const liveTimer = this.liveSyncTimers.get(webviewPanel);
-			if (liveTimer) clearTimeout(liveTimer);
-			this.liveSyncTimers.delete(webviewPanel);
+			const link = this.liveSessions.get(webviewPanel);
+			if (link?.forwardTimer) clearTimeout(link.forwardTimer);
+			if (link && !link.reverse) this.stopLink(link);
 			this.liveSessions.delete(webviewPanel);
 			saveDocumentSubscription.dispose();
 			onDidChangeOutputFolder.dispose();
 		});
 
 		// Receive message from the webview.
-		let pendingEdit = Promise.resolve();
 		webviewPanel.webview.onDidReceiveMessage(async (e) => {
 			try {
 				switch (e?.type) {
 					case 'webviewChanged':
 						if (typeof e.text === 'string') {
-							const edit = pendingEdit.then(() => this.updateTextDocument(document, e.text));
+							const edit = pendingEdit.then(async () => {
+								synchronizedText = await this.updateTextDocument(document, e.text);
+							});
 							pendingEdit = edit.catch(() => undefined);
 							await edit;
 							this.liveSync(webviewPanel, document);
@@ -366,7 +469,7 @@ export class MarkdownEditorProvider implements vscode.CustomTextEditorProvider {
 						break;
 					case 'executeCommand':
 						await pendingEdit;
-						await this.executeDocumentCommand(document, e.command);
+						await this.executeDocumentCommand(document, e.command, webviewPanel);
 						break;
 				}
 			} catch (err) {
@@ -416,11 +519,13 @@ export class MarkdownEditorProvider implements vscode.CustomTextEditorProvider {
 		}
 
 		let outAbs: string;
+		let output: string;
+		const sourceBaseline = document.getText();
 		let usedFolder = '';
 		try {
-			const context = buildMarkdownContext(document.getText(), path.basename(document.fileName));
+			const context = buildMarkdownContext(sourceBaseline, path.basename(document.fileName));
 			context.params = params;
-			const text = renderTemplate(body, context);
+			output = renderTemplate(body, context);
 			// Output name: the template's "output" basename when declared,
 			// otherwise the opened document's basename; extension from format.
 			const base = metadata.output
@@ -432,8 +537,9 @@ export class MarkdownEditorProvider implements vscode.CustomTextEditorProvider {
 				base + '.' + extensionForFormat(requestedFormat)
 			);
 			assertOutputIsSeparate(outAbs, document.fileName, templatePath);
+			await this.releaseOutput(outAbs);
 			await fs.promises.mkdir(path.dirname(outAbs), { recursive: true });
-			await fs.promises.writeFile(outAbs, text, 'utf8');
+			await fs.promises.writeFile(outAbs, output, 'utf8');
 		} catch (err: any) {
 			const message =
 				err instanceof TemplateError ? err.message : `generation failed: ${err?.message ?? err}`;
@@ -449,15 +555,14 @@ export class MarkdownEditorProvider implements vscode.CustomTextEditorProvider {
 			`Markdown Editor: generated ${rel} (${extensionForFormat(requestedFormat)})${folderNote}.`
 		);
 
-		// Start the live input -> output link: remember this generation, open
-		// the output file beside the editor, and from now on every section
-		// edit here re-renders the file and scrolls the output to that section.
-		this.liveSessions.set(webviewPanel, {
-			templatePath,
-			outputAbs: outAbs,
-			format: requestedFormat,
-			fingerprints: fingerprintsFromDocument(document.getText())
-		});
+		if (document.uri.scheme === 'file') {
+			this.startLink(webviewPanel, {
+				templatePath, outputAbs: path.resolve(outAbs), format: requestedFormat,
+				sourcePath: document.uri.fsPath, sourceBaseline, outputBaseline: output,
+				reverse: this.reverseJinja(templatePath, requestedFormat, metadata.reverse)
+			});
+		}
+
 		void Promise.resolve(
 			vscode.window.showTextDocument(vscode.Uri.file(outAbs), {
 				viewColumn: vscode.ViewColumn.Beside,
@@ -511,7 +616,15 @@ export class MarkdownEditorProvider implements vscode.CustomTextEditorProvider {
 
 		const source = vscode.workspace.textDocuments.find((open) => open.uri.fsPath === markdownPath);
 		const markdownText = source?.getText() ?? await fs.promises.readFile(markdownPath, 'utf8');
+		await this.releaseOutput(outAbs);
 		await generateFromTemplate(mapping, markdownText, requestedFormat, outAbs);
+		if (canImportMapping(requestedFormat)) {
+			this.startLink(webviewPanel, {
+				sourcePath: markdownPath, outputAbs: path.resolve(outAbs), format: requestedFormat,
+				sourceBaseline: markdownText, outputBaseline: await fs.promises.readFile(outAbs, 'utf8'),
+				reverse: (markdown, previous, output) => importMappedOutput(markdown, previous, output, mapping, requestedFormat)
+			});
+		}
 
 		const rel = vscode.workspace.asRelativePath(outAbs, true) || outAbs;
 		vscode.window.showInformationMessage(`Markdown Editor: generated ${rel} (${extensionForFormat(requestedFormat)}).`);
@@ -555,15 +668,17 @@ export class MarkdownEditorProvider implements vscode.CustomTextEditorProvider {
 
 	// Save new content to the text document
 	private async updateTextDocument(document: vscode.TextDocument, text: string) {
-		const formatted = prettier.format(text, { parser: 'markdown' }) as string;
+		const input = preserveMappingMarkers(document.getText(), text);
+		const formatted = prettier.format(input, { parser: 'markdown' }) as string;
 		const eol = document.eol === vscode.EndOfLine.CRLF ? '\r\n' : '\n';
 		const normalized = formatted.replace(/(?:\r\n|\r|\n)/g, eol);
-		if (normalized === document.getText()) return;
+		if (normalized === document.getText()) return normalized;
 		const edit = new vscode.WorkspaceEdit();
 		edit.replace(document.uri, new vscode.Range(0, 0, document.lineCount, 0), normalized);
 		if (!(await vscode.workspace.applyEdit(edit))) {
 			throw new Error('Could not update the Markdown document.');
 		}
+		return normalized;
 	}
 }
 
