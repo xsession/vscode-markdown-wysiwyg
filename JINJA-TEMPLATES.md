@@ -4,7 +4,9 @@ The toolbar's **Template** button opens the native file browser and picks a
 Jinja conversion template (`.j2`, `.jinja`, `.jnt`). The template describes
 how the opened Markdown document converts into the selected output format; a
 TypeScript backend inside the extension (no Python, no external runtime)
-renders it when you press **Generate**.
+renders it when you press **Generate**. The same picker also accepts legacy
+`.table-template.json` mappings. The Format menu lets you override the output
+format or return to **Template default**.
 
 ```
 Template button ──file browser──▶ template.j2 (front matter + Jinja body)
@@ -19,10 +21,10 @@ An optional YAML front matter, then the Jinja body:
 
 ```
 ---
-name: Register map to YAML     # shown on the toolbar button
-format: yaml                   # default output format (auto-selected)
-output: board.yaml             # optional: output file basename
-struct_name: demoFpgaRegs      # any other key becomes a template param
+name: Register map to YAML
+format: yaml
+output: board.yaml
+struct_name: demoFpgaRegs
 ---
 # body: {{ source }} has {{ rows | length }} rows
 ...

@@ -16,6 +16,10 @@ const folder=index.getChildren()[0],file=index.getChildren(folder)[0],intro=inde
 assert.strictEqual(setup.label,'Setup');await commands.get('markdownEditor.documentation.open')(setup);assert.strictEqual(opened.length,1);
 await commands.get('markdownEditor.documentation.listen')(setup);assert.strictEqual(spoken[0][0],doc.getText());assert.strictEqual(spoken[0][4],2);assert.strictEqual(spoken[0][1],'Setup');
 await commands.get('markdownEditor.documentation.open')({id:'file:///outside'});assert.strictEqual(opened.length,1);
+const outside = {path:'/outside.md',toString:()=> 'file:///outside.md'};
+await commands.get('markdownEditor.documentation.open')(undefined,outside);assert.strictEqual(opened.length,2);
+await commands.get('markdownEditor.documentation.listen')(undefined,outside);assert.strictEqual(spoken[1][2],outside.toString());
+
 assert.strictEqual(index.getTreeItem(setup).command.command,'markdownEditor.documentation.open');assert(events.length);index.dispose();
 console.log('Documentation explorer: workspace scan, native tree, source navigation, section listening, unknown-node rejection and disposal passed');
 })().catch(e=>{console.error(e);process.exitCode=1;});

@@ -7,7 +7,7 @@ Using this as a template:
 - [https://github.com/ckeditor/ckeditor5/tree/master/packages/ckeditor5-build-classic](https://github.com/ckeditor/ckeditor5/tree/master/packages/ckeditor5-build-classic)
 - [https://github.com/ckeditor/ckeditor5/tree/master/packages/ckeditor5-theme-lark](https://github.com/ckeditor/ckeditor5/tree/master/packages/ckeditor5-theme-lark)
 
-Any changes to the CKEditor5 editor need to be built by running `npm build` in this folder. The root extension code webview reads `ckeditor.js` from the build folder output.
+From the repository root, run `npm run build:editor` to rebuild CKEditor. The extension reads `build/ckeditor.js` from this folder. The development extension build and VSIX packaging both rebuild it from the locked dependencies.
 
 `npm start` was enabled using code from this PR [https://github.com/ckeditor/ckeditor5/pull/10130/files](https://github.com/ckeditor/ckeditor5/pull/10130/files)
 

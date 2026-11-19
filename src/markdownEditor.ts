@@ -1,4 +1,3 @@
-import { time } from 'console';
 import * as path from 'path';
 import * as fs from 'fs';
 import * as vscode from 'vscode';
@@ -15,43 +14,49 @@ import {
 
 const prettier = require('prettier');
 
-// Table template mapping files (see TEMPLATE-SYNC.md). The toolbar's template
-// selector lists every mapping file in the workspace.
-const TEMPLATE_GLOB = '**/*.table-template.json';
-const TEMPLATE_EXCLUDES =
-	'{**/node_modules/**,**/dist/**,**/dist_/**,**/out/**,**/out_/**,**/.git/**}';
-
-// Jinja conversion templates (see JINJA-TEMPLATES.md): the Template button
-// opens a file browser for one of these, the TypeScript backend renders it
-// against the opened Markdown document.
+const TABLE_TEMPLATE_SUFFIX = '.table-template.json';
 const JINJA_TEMPLATE_EXTS = new Set(['.j2', '.jinja', '.jnt']);
 
-export interface ToolbarTemplate {
-	name: string;
-	path: string;
-	format?: string;
-	output?: string;
+function isJinjaTemplate(filePath: string): boolean {
+	return JINJA_TEMPLATE_EXTS.has(path.extname(filePath).toLowerCase());
 }
 
-async function collectTemplates(): Promise<ToolbarTemplate[]> {
-	const uris = await vscode.workspace.findFiles(TEMPLATE_GLOB, TEMPLATE_EXCLUDES, 200);
-	const templates: ToolbarTemplate[] = [];
-	for (const uri of uris) {
-		try {
-			const raw = await vscode.workspace.fs.readFile(uri);
-			const mapping = JSON.parse(Buffer.from(raw).toString('utf8'));
-			templates.push({
-				name: path.basename(uri.fsPath).replace(/\.table-template\.json$/, ''),
-				path: uri.fsPath,
-				format: typeof mapping.format === 'string' ? mapping.format : undefined,
-				output: typeof mapping.output === 'string' ? mapping.output : undefined,
-			});
-		} catch (err) {
-			console.warn('Skipping invalid table template', uri.fsPath, err);
-		}
+function readTableMapping(raw: string): TemplateMapping {
+	const mapping = JSON.parse(raw.replace(/^\uFEFF/, ''));
+	if (!mapping || typeof mapping.markdown !== 'string' || !mapping.markdown ||
+		typeof mapping.output !== 'string' || !mapping.output ||
+		typeof mapping.table !== 'string' || !mapping.table ||
+		(mapping.format !== undefined && typeof mapping.format !== 'string') ||
+		!mapping.columns || typeof mapping.columns !== 'object' || Array.isArray(mapping.columns)) {
+		throw new GenerationError('The table template requires "markdown", "output", "table" and "columns".');
 	}
-	templates.sort((a, b) => a.name.localeCompare(b.name));
-	return templates;
+	return mapping;
+}
+
+function normalizeOutputFormat(format: string): string {
+	const name = format.trim().toLowerCase();
+	switch (name) {
+		case 'yml': return 'yaml';
+		case 'htm': return 'html';
+		case 'md': return 'markdown';
+		default: return name;
+	}
+}
+
+function mappingOutputFormat(mapping: TemplateMapping): string {
+	const file = path.basename(mapping.output);
+	const extension = path.extname(file).slice(1) || (file.startsWith('.') ? file.slice(1) : '');
+	return normalizeOutputFormat(mapping.format || extension);
+}
+
+function assertOutputIsSeparate(output: string, ...inputs: string[]): void {
+	const resolved = (filePath: string) => {
+		const absolute = path.resolve(filePath);
+		return process.platform === 'win32' ? absolute.toLowerCase() : absolute;
+	};
+	if (inputs.some((input) => resolved(input) === resolved(output))) {
+		throw new GenerationError('Choose an output folder or file name that differs from the source and template.');
+	}
 }
 
 // Where generated output files are written: the markdownEditor.outputFolder
@@ -160,111 +165,85 @@ export class MarkdownEditorProvider implements vscode.CustomTextEditorProvider {
 		}
 	}
 
-	// Push the workspace template list into the editor's toolbar template selector.
-	private sendTemplates(webviewPanel: vscode.WebviewPanel) {
-		void collectTemplates().then((templates) => {
-			webviewPanel.webview.postMessage({ type: 'templates', templates });
-		});
-	}
-
-	// Tell the toolbar which output folder is currently configured.
 	private sendOutputFolder(webviewPanel: vscode.WebviewPanel) {
-		webviewPanel.webview.postMessage({
-			type: 'outputFolder',
-			folder: vscode.workspace
-				.getConfiguration('markdownEditor')
-				.get<string>('outputFolder', '')
-				|| '',
-		});
+		return webviewPanel.webview.postMessage({ type: 'outputFolder', folder: currentOutputFolder() });
 	}
 
-	// The toolbar's file-browser button: native folder picker, stored in the
-	// markdownEditor.outputFolder workspace setting.
-	private async pickOutputFolder(webviewPanel: vscode.WebviewPanel) {
+	private async pickOutputFolder(webviewPanel: vscode.WebviewPanel, document: vscode.TextDocument) {
+		const current = currentOutputFolder();
 		const dirs = await vscode.window.showOpenDialog({
 			canSelectFiles: false,
 			canSelectFolders: true,
 			canSelectMany: false,
+			defaultUri: path.isAbsolute(current) ? vscode.Uri.file(current) : this.documentDirectory(document),
 			openLabel: 'Set as generation output folder',
 		});
 		const dir = dirs?.[0];
-		if (!dir) {
-			return;
-		}
-		const configured = vscode.workspace.isTrusted
-			? path.isAbsolute(dir.fsPath)
-				? dir.fsPath
-				: vscode.workspace.asRelativePath(dir.fsPath)
-			: '';
-		await vscode.workspace
-			.getConfiguration('markdownEditor')
-			.update('outputFolder', configured, vscode.ConfigurationTarget.Workspace);
-		this.sendOutputFolder(webviewPanel);
+		if (!dir) return;
+		const target = vscode.workspace.workspaceFolders?.length
+			? vscode.ConfigurationTarget.Workspace
+			: vscode.ConfigurationTarget.Global;
+		await vscode.workspace.getConfiguration('markdownEditor').update('outputFolder', dir.fsPath, target);
+		await this.sendOutputFolder(webviewPanel);
 	}
 
-	// The toolbar's Template button: native file browser for a Jinja
-	// conversion template. The picked file is validated here (front matter +
-	// nonempty body) and reported back to the webview, which sets the
-	// toolbar's template state (name, and the default output format when the
-	// template declares one).
-	private async pickTemplate(webviewPanel: vscode.WebviewPanel) {
+	private documentDirectory(document: vscode.TextDocument): vscode.Uri | undefined {
+		return document.isUntitled
+			? vscode.workspace.workspaceFolders?.[0]?.uri
+			: vscode.Uri.joinPath(document.uri, '..');
+	}
+
+	private async pickTemplate(webviewPanel: vscode.WebviewPanel, document: vscode.TextDocument) {
 		const files = await vscode.window.showOpenDialog({
 			canSelectFiles: true,
 			canSelectFolders: false,
 			canSelectMany: false,
+			defaultUri: this.documentDirectory(document),
 			openLabel: 'Select conversion template',
 			filters: {
-				'Jinja templates': ['j2', 'jinja', 'jnt'],
+				'Conversion templates': ['j2', 'jinja', 'jnt', 'json'],
 				'All files': ['*']
 			}
 		});
 		const file = files?.[0];
-		if (!file) {
-			return;
+		if (!file) return;
+		const baseName = path.basename(file.fsPath);
+		const jinja = isJinjaTemplate(baseName);
+		if (!jinja && !baseName.toLowerCase().endsWith(TABLE_TEMPLATE_SUFFIX)) {
+			throw new GenerationError('Choose a Jinja template (.j2, .jinja, .jnt) or a .table-template.json mapping.');
 		}
-		let raw: string;
-		try {
-			raw = Buffer.from(await vscode.workspace.fs.readFile(file)).toString('utf8');
-		} catch (err: any) {
-			vscode.window.showErrorMessage(
-				`Markdown Editor: could not read template "${path.basename(file.fsPath)}": ${err?.message ?? err}`
-			);
-			return;
+
+		const raw = Buffer.from(await vscode.workspace.fs.readFile(file)).toString('utf8');
+		let name: string;
+		let format: string;
+		if (jinja) {
+			const { metadata, body } = splitTemplateFile(raw);
+			if (!body.trim()) throw new GenerationError(`Template "${baseName}" has no Jinja body.`);
+			name = metadata.name || baseName;
+			format = normalizeOutputFormat(metadata.format || 'yaml');
+		} else {
+			const mapping = readTableMapping(raw);
+			name = baseName.slice(0, -TABLE_TEMPLATE_SUFFIX.length);
+			format = mappingOutputFormat(mapping);
 		}
-		const { metadata, body } = splitTemplateFile(raw);
-		if (!body.trim()) {
-			vscode.window.showErrorMessage(
-				`Markdown Editor: template "${path.basename(file.fsPath)}" has no Jinja body.`
-			);
-			return;
-		}
-		webviewPanel.webview.postMessage({
-			type: 'templatePicked',
-			path: file.fsPath,
-			name: metadata.name || path.basename(file.fsPath),
-			format: metadata.format
+		await webviewPanel.webview.postMessage({
+			type: 'templatePicked', path: file.fsPath, name, format, kind: jinja ? 'jinja' : 'mapping'
 		});
 	}
 
-	// Document action buttons on the second toolbar row run these extension
-	// commands on the document the webview is showing.
-	private executeDocumentCommand(document: vscode.TextDocument, command: string) {
-		const DOCUMENT_COMMANDS = [
-			'markdownEditor.documentation.mindmap',
-			'markdownEditor.readAloud',
-			'markdownEditor.documentation.open',
-			'markdownEditor.documentation.listen',
-		];
-		if (!DOCUMENT_COMMANDS.includes(command)) {
-			return;
+	private async executeDocumentCommand(document: vscode.TextDocument, command: string) {
+		switch (command) {
+			case 'markdownEditor.documentation.mindmap':
+				await vscode.commands.executeCommand(command);
+				break;
+			case 'markdownEditor.readAloud':
+				await vscode.commands.executeCommand(command, document.uri);
+				break;
+			case 'markdownEditor.documentation.open':
+			case 'markdownEditor.documentation.listen':
+				await vscode.commands.executeCommand(command, undefined, document.uri);
+				break;
 		}
-		if (command === 'markdownEditor.documentation.open' || command === 'markdownEditor.documentation.listen') {
-			// The explorer commands take a node argument; for the current
-			// document the node id is the document uri string.
-			void vscode.commands.executeCommand(command, { id: document.uri.toString() });
-			return;
-		}
-		void vscode.commands.executeCommand(command);
 	}
 
 	// Called when our custom editor is opened.
@@ -275,7 +254,6 @@ export class MarkdownEditorProvider implements vscode.CustomTextEditorProvider {
 	): Promise<void> {
 		// Setup initial webview HTML and settings
 		webviewPanel.webview.options = { enableScripts: true };
-		webviewPanel.webview.html = this.getHtmlForWebview(webviewPanel.webview);
 
 		// Update global state when a webview is focused.
 		function handleFocusChange(panel: vscode.WebviewPanel, initialLoadFlag = false) {
@@ -311,12 +289,6 @@ export class MarkdownEditorProvider implements vscode.CustomTextEditorProvider {
 			handleFocusChange(e.webviewPanel);
 		});
 
-		// Initial scroll sync
-		webviewPanel.webview.postMessage({
-			type: 'scrollChanged',
-			scrollTop: document.lineAt(0).range.start.line,
-		});
-
 		////////////////////////////////////////////////////////////////////////////////////////
 		// Hook up event handlers so that we can synchronize the webview with the text document.
 		//
@@ -329,61 +301,24 @@ export class MarkdownEditorProvider implements vscode.CustomTextEditorProvider {
 		function updateWebview() {
 			let text = document.getText();
 
-			// Change EOL to \n because that's what CKEditor5 uses internally
+			// CKEditor uses LF internally.
 			text = text.replace(/(?:\r\n|\r|\n)/g, '\n');
 
-			console.log('updateWebview', [JSON.stringify(text)]);
 			webviewPanel.webview.postMessage({ type: 'documentChanged', text: text });
 		}
 
-		const saveDocumentSubscription = vscode.workspace.onDidSaveTextDocument((e) => {
-			console.log('Saved Document');
-			updateWebview();
+		const saveDocumentSubscription = vscode.workspace.onDidSaveTextDocument((saved) => {
+			if (saved === document) updateWebview();
 		});
 
-		const changeDocumentSubscription = vscode.workspace.onDidChangeTextDocument((e) => {
-			console.log('Changed Document: ', [JSON.stringify(e.document.getText())]);
-		});
-
-		const onDidChangeTextEditorVisibleRanges = vscode.window.onDidChangeTextEditorVisibleRanges(
-			(e) => {
-				console.log('onDidChangeTextEditorVisibleRanges: ', [JSON.stringify(e)]);
-				if (e.textEditor.document === document) {
-					//  Sync scroll from editor to webview
-					webviewPanel.webview.postMessage({
-						type: 'scrollChanged',
-						scrollTop: e.textEditor.visibleRanges[0].start.line,
-					});
-				}
-			}
-		);
-
-		// Keep the toolbar's template selector in sync with the workspace.
-		const isTemplateFile = (uri: vscode.Uri) => uri.fsPath.endsWith('.table-template.json');
-		const onDidCreateTemplates = vscode.workspace.onDidCreateFiles((e) => {
-			if (e.files.some(isTemplateFile)) {
-				this.sendTemplates(webviewPanel);
-			}
-		});
-		const onDidDeleteTemplates = vscode.workspace.onDidDeleteFiles((e) => {
-			if (e.files.some(isTemplateFile)) {
-				this.sendTemplates(webviewPanel);
-			}
-		});
-		const onDidSaveTemplate = vscode.workspace.onDidSaveTextDocument((e) => {
-			if (isTemplateFile(e.uri)) {
-				this.sendTemplates(webviewPanel);
-			}
-		});
 		const onDidChangeOutputFolder = vscode.workspace.onDidChangeConfiguration((e) => {
 			if (e.affectsConfiguration('markdownEditor.outputFolder')) {
-				this.sendOutputFolder(webviewPanel);
+				void this.sendOutputFolder(webviewPanel);
 			}
 		});
 
 		// Make sure we get rid of the listener when our editor is closed.
 		webviewPanel.onDidDispose(() => {
-			console.log('Disposed1');
 			if (extensionState.activeWebviewPanel === webviewPanel) {
 				vscode.commands
 					.executeCommand('setContext', 'markdownEditor.editorIsActive', false)
@@ -391,55 +326,55 @@ export class MarkdownEditorProvider implements vscode.CustomTextEditorProvider {
 						console.log('markdownEditor.editorIsActive', false);
 					});
 			}
-			console.log('Disposed2');
 			const liveTimer = this.liveSyncTimers.get(webviewPanel);
 			if (liveTimer) clearTimeout(liveTimer);
 			this.liveSyncTimers.delete(webviewPanel);
 			this.liveSessions.delete(webviewPanel);
-			changeDocumentSubscription.dispose();
 			saveDocumentSubscription.dispose();
-			onDidCreateTemplates.dispose();
-			onDidDeleteTemplates.dispose();
-			onDidSaveTemplate.dispose();
 			onDidChangeOutputFolder.dispose();
 		});
 
 		// Receive message from the webview.
-		webviewPanel.webview.onDidReceiveMessage((e) => {
-			console.log('onDidReceiveMessage: ', [JSON.stringify(e)]);
-			switch (e.type) {
-				case 'webviewChanged':
-					this.updateTextDocument(document, e.text);
-					this.liveSync(webviewPanel, document);
-					return;
-				case 'initialized':
-					updateWebview();
-					this.sendTemplates(webviewPanel);
-					this.sendOutputFolder(webviewPanel);
-					return;
-				case 'plainPaste':
-					vscode.commands.executeCommand('editor.action.clipboardPasteAction');
-					return;
-				case 'templateSelected':
-					console.log('templateSelected', e.template);
-					return;
-				case 'formatSelected':
-					console.log('formatSelected', e.format);
-					return;
-				case 'generateRequest':
-					void this.handleGenerateRequest(e, document, webviewPanel);
-					return;
-				case 'pickTemplate':
-					void this.pickTemplate(webviewPanel);
-					return;
-				case 'pickOutputFolder':
-					void this.pickOutputFolder(webviewPanel);
-					return;
-				case 'executeCommand':
-					this.executeDocumentCommand(document, e.command);
-					return;
+		let pendingEdit = Promise.resolve();
+		webviewPanel.webview.onDidReceiveMessage(async (e) => {
+			try {
+				switch (e?.type) {
+					case 'webviewChanged':
+						if (typeof e.text === 'string') {
+							const edit = pendingEdit.then(() => this.updateTextDocument(document, e.text));
+							pendingEdit = edit.catch(() => undefined);
+							await edit;
+							this.liveSync(webviewPanel, document);
+						}
+						break;
+					case 'initialized':
+						updateWebview();
+						await this.sendOutputFolder(webviewPanel);
+						break;
+					case 'plainPaste':
+						await vscode.commands.executeCommand('editor.action.clipboardPasteAction');
+						break;
+					case 'generateRequest':
+						await pendingEdit;
+						await this.handleGenerateRequest(e, document, webviewPanel);
+						break;
+					case 'pickTemplate':
+						await this.pickTemplate(webviewPanel, document);
+						break;
+					case 'pickOutputFolder':
+						await this.pickOutputFolder(webviewPanel, document);
+						break;
+					case 'executeCommand':
+						await pendingEdit;
+						await this.executeDocumentCommand(document, e.command);
+						break;
+				}
+			} catch (err) {
+				const message = err instanceof Error ? err.message : String(err);
+				void vscode.window.showErrorMessage(`Markdown Editor: ${message}`);
 			}
 		});
+		webviewPanel.webview.html = this.getHtmlForWebview(webviewPanel.webview);
 	}
 
 	// Generate output with a Jinja conversion template: read the template
@@ -452,7 +387,7 @@ export class MarkdownEditorProvider implements vscode.CustomTextEditorProvider {
 		webviewPanel: vscode.WebviewPanel
 	): Promise<void> {
 		const templatePath: string = e.template;
-		const format = typeof e.format === 'string' ? e.format : null;
+		const format = typeof e.format === 'string' ? normalizeOutputFormat(e.format) : null;
 		const baseName = path.basename(templatePath);
 
 		let raw: string;
@@ -472,7 +407,13 @@ export class MarkdownEditorProvider implements vscode.CustomTextEditorProvider {
 			);
 			return;
 		}
-		const requestedFormat = format ?? metadata.format ?? 'yaml';
+		const requestedFormat = format ?? normalizeOutputFormat(metadata.format || 'yaml');
+		if (!/^[a-z0-9_-]+$/.test(requestedFormat)) {
+			throw new GenerationError('Choose a valid output format.');
+		}
+		if (requestedFormat === 'docx') {
+			throw new GenerationError('Choose a table-template mapping to generate a Word document.');
+		}
 
 		let outAbs: string;
 		let usedFolder = '';
@@ -490,6 +431,7 @@ export class MarkdownEditorProvider implements vscode.CustomTextEditorProvider {
 				usedFolder || path.dirname(templatePath),
 				base + '.' + extensionForFormat(requestedFormat)
 			);
+			assertOutputIsSeparate(outAbs, document.fileName, templatePath);
 			await fs.promises.mkdir(path.dirname(outAbs), { recursive: true });
 			await fs.promises.writeFile(outAbs, text, 'utf8');
 		} catch (err: any) {
@@ -535,7 +477,7 @@ export class MarkdownEditorProvider implements vscode.CustomTextEditorProvider {
 		webviewPanel: vscode.WebviewPanel
 	): Promise<void> {
 		const templatePath = typeof e.template === 'string' ? e.template : null;
-		const format = typeof e.format === 'string' ? e.format : null;
+		const format = typeof e.format === 'string' ? normalizeOutputFormat(e.format) : null;
 
 		if (!templatePath) {
 			vscode.window.showInformationMessage(
@@ -544,53 +486,32 @@ export class MarkdownEditorProvider implements vscode.CustomTextEditorProvider {
 			return;
 		}
 
-		if (JINJA_TEMPLATE_EXTS.has(path.extname(templatePath).toLowerCase())) {
+		if (isJinjaTemplate(templatePath)) {
 			await this.generateWithJinjaTemplate(e, document, webviewPanel);
 			return;
 		}
 
-		let mapping: TemplateMapping;
-		try {
-			const raw = await vscode.workspace.fs.readFile(vscode.Uri.file(templatePath));
-			mapping = JSON.parse(Buffer.from(raw).toString('utf8'));
-		} catch (err: any) {
-			vscode.window.showErrorMessage(
-				`Markdown Editor: could not read template "${path.basename(templatePath)}": ${
-					err?.message ?? err
-				}`
-			);
-			return;
-		}
-
-		if (!mapping || typeof mapping.markdown !== 'string' || typeof mapping.output !== 'string') {
-			vscode.window.showErrorMessage(
-				`Markdown Editor: template "${path.basename(templatePath)}" is missing "markdown" or "output".`
-			);
-			return;
-		}
-		if (!mapping.table || typeof mapping.table !== 'string') {
-			vscode.window.showErrorMessage(
-				`Markdown Editor: template "${path.basename(templatePath)}" is missing "table".`
-			);
-			return;
-		}
-
+		const raw = await vscode.workspace.fs.readFile(vscode.Uri.file(templatePath));
+		const mapping = readTableMapping(Buffer.from(raw).toString('utf8'));
 		const mappingDir = path.dirname(templatePath);
 		const markdownPath = path.resolve(mappingDir, mapping.markdown);
-		const requestedFormat = format ?? mapping.format ?? path.extname(mapping.output).slice(1);
-		// The selected format decides the output file extension.
-		let outputBase = path.basename(mapping.output).replace(/\.[^.]+$/, '');
-		let outAbs: string;
-		try {
-			const markdownText = await fs.promises.readFile(markdownPath, 'utf8');
-			const outputFolder = currentOutputFolder();
-			outAbs = path.join(outputFolder || mappingDir, outputBase + '.' + extensionForFormat(requestedFormat));
-			await generateFromTemplate(mapping, markdownText, requestedFormat, outAbs);
-		} catch (err: any) {
-			const message = err instanceof GenerationError ? err.message : `generation failed: ${err?.message ?? err}`;
-			vscode.window.showErrorMessage(`Markdown Editor: ${message}`);
-			return;
+		const requestedFormat = format ?? mappingOutputFormat(mapping);
+		const configuredFolder = currentOutputFolder();
+		// Keep the mapped extension and directory unless the toolbar overrides them.
+		const mappedOutput = path.resolve(mappingDir, mapping.output);
+		const outputBase = path.basename(mappedOutput).replace(/\.[^.]+$/, '');
+		const outAbs = !configuredFolder && !format
+			? mappedOutput
+			: path.join(configuredFolder || path.dirname(mappedOutput),
+				format ? outputBase + '.' + extensionForFormat(requestedFormat) : path.basename(mappedOutput));
+		assertOutputIsSeparate(outAbs, markdownPath, templatePath);
+		if (mapping.docx?.template) {
+			assertOutputIsSeparate(outAbs, path.resolve(mappingDir, mapping.docx.template));
 		}
+
+		const source = vscode.workspace.textDocuments.find((open) => open.uri.fsPath === markdownPath);
+		const markdownText = source?.getText() ?? await fs.promises.readFile(markdownPath, 'utf8');
+		await generateFromTemplate(mapping, markdownText, requestedFormat, outAbs);
 
 		const rel = vscode.workspace.asRelativePath(outAbs, true) || outAbs;
 		vscode.window.showInformationMessage(`Markdown Editor: generated ${rel} (${extensionForFormat(requestedFormat)}).`);
@@ -624,56 +545,24 @@ export class MarkdownEditorProvider implements vscode.CustomTextEditorProvider {
 				</head>
 				<body>
 					<div id="mdwysiwyg-root"></div>
+					<p id="editor-startup-error" role="alert" hidden></p>
 
 					<script nonce="${nonce}" src="${ckeditorUri}"></script>
-					<script nonce="${nonce}">
-						MarkdownEditor.create(document.querySelector('#mdwysiwyg-root'))
-							.then((editor) => {
-								window.editor = editor;
-								editor.timeLastModified = new Date();
-								console.log('CKEditor instance:', editor);
-							})
-							.catch((error) => {
-								console.error('CKEditor Initialization Error:', error);
-							});
-					</script>
 					<script nonce="${nonce}" src="${initScriptUri}"></script>
 				</body>
 			</html> `;
 	}
 
 	// Save new content to the text document
-	private updateTextDocument(document: vscode.TextDocument, text: any) {
-		console.log('VS Code started updateTextDocument', [JSON.stringify(text)]);
-
-		let rawText = text;
-
-		// Autoformat the markdown text using Prettier
-		text = prettier.format(text, {
-			parser: 'markdown',
-		});
-
-		let prettierText = text;
-
-		// Standardize text EOL character to match document
-		// https://code.visualstudio.com/api/references/vscode-api#EndOfLine
-		const eol_chars = document?.eol == 2 ? '\r\n' : '\n';
-		text = text.replace(/(?:\r\n|\r|\n)/g, eol_chars);
-
-		let finalText = text;
-		let fileText = document?.getText();
-
-		if (text != fileText) {
-			// TODO - Apply edits to the document instead of replacing the whole thing
-			const newEdit = new vscode.WorkspaceEdit();
-			newEdit.replace(document.uri, new vscode.Range(0, 0, document.lineCount, 0), text);
-			vscode.workspace.applyEdit(newEdit);
-
-			// console.debug('Updating Document because content changed');
-			// console.debug('rawText', JSON.stringify(rawText));
-			// console.debug('prettierText', JSON.stringify(prettierText));
-			// console.debug('finalText', JSON.stringify(finalText));
-			// console.debug('fileText', JSON.stringify(fileText));
+	private async updateTextDocument(document: vscode.TextDocument, text: string) {
+		const formatted = prettier.format(text, { parser: 'markdown' }) as string;
+		const eol = document.eol === vscode.EndOfLine.CRLF ? '\r\n' : '\n';
+		const normalized = formatted.replace(/(?:\r\n|\r|\n)/g, eol);
+		if (normalized === document.getText()) return;
+		const edit = new vscode.WorkspaceEdit();
+		edit.replace(document.uri, new vscode.Range(0, 0, document.lineCount, 0), normalized);
+		if (!(await vscode.workspace.applyEdit(edit))) {
+			throw new Error('Could not update the Markdown document.');
 		}
 	}
 }

@@ -329,7 +329,7 @@
         "markdownEditor.outputFolder": {
           "type": "string",
           "default": "",
-          "description": "Folder where code generation writes output files (absolute path, or relative to the workspace root). Empty = next to the template file. Settable from the editor toolbar's output-folder button."
+          "description": "Folder where code generation writes output files (absolute path, or relative to the workspace root). Empty = next to the Jinja template or the destination specified by a table mapping. Settable from the editor toolbar's output-folder button."
         },
         "markdownEditor.piper.executable": {
           "type": "string",
@@ -423,9 +423,10 @@
     }
   },
   "scripts": {
-    "vscode:prepublish": "node scripts/clean-package-fragments.js && node scripts/prepare-document-package.js && node scripts/verify-voices.js && node scripts/verify-runtime.js && node scripts/verify-ai.js && node scripts/verify-document-parsers.js && webpack --mode production --no-optimization-minimize",
-    "webpack": "webpack --mode development",
-    "webpack-dev": "webpack --mode development --watch",
+    "vscode:prepublish": "npm run build:editor && node scripts/clean-package-fragments.js && node scripts/prepare-document-package.js && node scripts/verify-voices.js && node scripts/verify-runtime.js && node scripts/verify-ai.js && node scripts/verify-document-parsers.js && webpack --mode production --no-optimization-minimize",
+    "build:editor": "npm ci --prefix ckeditor5-build-markdown --no-audit --no-fund && npm run build --prefix ckeditor5-build-markdown",
+    "webpack": "npm run build:editor && webpack --mode development",
+    "webpack-dev": "npm run build:editor && webpack --mode development --watch",
     "test-compile": "tsc -p ./",
     "lint": "eslint . --ext .ts,.tsx",
     "test": "npm run test-compile && node tests/speechText.test.js && node tests/listeningDocument.test.js && node tests/speechEngine.test.js && node tests/piperReader.test.js && node tests/voiceManager.test.js && node tests/documentationIndex.test.js && node tests/documentationExplorer.test.js && node tests/documentFormats.test.js && node tests/documentLoader.test.js && node tests/listeningWorkspace.test.js && node tests/projectListening.test.js && node tests/localAssistant.test.js && node tests/jinjaTemplate.test.js",

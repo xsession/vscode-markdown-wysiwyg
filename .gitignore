@@ -20,3 +20,6 @@ out_/
 
 .vscode/settings.json
 bundle-test.bundle
+
+/ckeditor5-build-markdown/build/
+ckeditor5-build-markdown/genereated/

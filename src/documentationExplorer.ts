@@ -28,8 +28,8 @@ export class DocumentationExplorer implements vscode.TreeDataProvider<DocNode>, 
   const command = (id: string, action: (...args: any[]) => any) => this.subscriptions.push(vscode.commands.registerCommand(id, action));
   command('markdownEditor.documentation.refresh', () => this.refresh());
   command('markdownEditor.documentation.mindmap', () => this.showMap());
-  command('markdownEditor.documentation.open', (node: DocNode) => this.open(node?.id));
-  command('markdownEditor.documentation.listen', (node: DocNode) => this.open(node?.id, true));
+  command('markdownEditor.documentation.open', (node?: DocNode, uri?: vscode.Uri) => this.open(node?.id, false, uri));
+  command('markdownEditor.documentation.listen', (node?: DocNode, uri?: vscode.Uri) => this.open(node?.id, true, uri));
   const watcher = vscode.workspace.createFileSystemWatcher(documentGlob);
   this.subscriptions.push(watcher, watcher.onDidCreate(() => this.schedule()), watcher.onDidChange(() => this.schedule()), watcher.onDidDelete(() => this.schedule()),
    vscode.workspace.onDidChangeTextDocument(e => { if (isSupportedDocument(e.document.uri.path)) this.schedule(); }),
@@ -83,14 +83,21 @@ export class DocumentationExplorer implements vscode.TreeDataProvider<DocNode>, 
   if (node.uri) item.command = {command:'markdownEditor.documentation.open', title:'Open section', arguments:[node]};
   return item;
  }
- private async open(id: string, listen = false) {
-  const node = this.nodes.get(id); if (!node?.uri) return;
+ private async open(id: string | undefined, listen = false, documentUri?: vscode.Uri) {
+  const node = id ? this.nodes.get(id) : undefined;
+  const uri = documentUri ?? (node?.uri ? vscode.Uri.parse(node.uri) : undefined);
+  if (!uri) return;
+  const key = uri.toString();
+  const line = node?.line ?? 0;
   try {
-   const uri = vscode.Uri.parse(node.uri);
-   const imported = this.imports.get(node.uri) || await this.loader.load(uri);
+   const imported = documentUri ? await this.loader.load(uri) : this.imports.get(key) ?? await this.loader.load(uri);
    if (listen) {
-    await this.reader.open(imported.markdown,node.label,node.uri,true,node.line||0);
-   } else {const text=this.sourceTransform(node.uri,imported.markdown);await this.loader.show(uri,text!==imported.markdown?{...imported,markdown:text,extracted:true}:imported,node.line||0);}
+    const title = node?.label || uri.path.split('/').pop() || 'Document';
+    await this.reader.open(imported.markdown, title, key, true, line);
+   } else {
+    const text = this.sourceTransform(key, imported.markdown);
+    await this.loader.show(uri, text !== imported.markdown ? {...imported, markdown: text, extracted: true} : imported, line);
+   }
   } catch (error) { vscode.window.showErrorMessage(String(error)); }
  }
  private showMap() {

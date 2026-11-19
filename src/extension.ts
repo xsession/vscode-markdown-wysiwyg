@@ -53,10 +53,12 @@ export function activate(context: vscode.ExtensionContext) {
 		} catch(error) { vscode.window.showErrorMessage(String(error)); }
 	}));
 	for (const selectionOnly of [false, true]) {
-		context.subscriptions.push(vscode.commands.registerCommand(selectionOnly ? 'markdownEditor.readSelection' : 'markdownEditor.readAloud', async () => {
+		context.subscriptions.push(vscode.commands.registerCommand(selectionOnly ? 'markdownEditor.readSelection' : 'markdownEditor.readAloud', async (uri?: vscode.Uri) => {
 			try {
 				const editor = vscode.window.activeTextEditor;
-				const document = editor ? editor.document : extensionState.activeWebviewPanel?.active ? extensionState.activeDocument : undefined;
+				const document = !selectionOnly && uri instanceof vscode.Uri
+					? await vscode.workspace.openTextDocument(uri)
+					: editor?.document ?? (extensionState.activeWebviewPanel?.active ? extensionState.activeDocument : undefined);
 				if (!document || !isSupportedDocument(document.uri.path)) { await vscode.commands.executeCommand('markdownEditor.readDocument'); return; }
 				if (selectionOnly && (!editor || editor.selection.isEmpty)) throw new Error('Select Markdown text in the source editor first.');
 				const imported = selectionOnly && editor ? await importDocument(Buffer.from(document.getText(editor.selection),'utf8'),document.uri.path) : await loader.load(document.uri);
@@ -113,9 +115,7 @@ export function activate(context: vscode.ExtensionContext) {
 		});
 	});
 
-	// Persist the toolbar's output-folder selection: markdownEditor.ts
-	// pickOutputFolder calls this command after the native folder picker, and
-	// currentOutputFolder() reads the setting for every generate request.
+	// Also allow other commands to set the user's default output folder.
 	registerCommand('markdownEditor.setOutputFolder', async (folder?: string) => {
 		await vscode.workspace.getConfiguration('markdownEditor').update(
 			'outputFolder',

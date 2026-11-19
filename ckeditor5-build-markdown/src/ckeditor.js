@@ -157,14 +157,7 @@ MarkdownEditor.builtinPlugins = [
 	},
 
 	///////////////////////////////////////////////////////
-	// Code generation toolbar (second row): a generate
-	// button, a template button and an output format
-	// selector. The Template button opens the extension
-	// host's native file browser for a Jinja conversion
-	// template; selections are posted to the extension
-	// host through window.vscode.postMessage, and the
-	// host pushes state back through
-	// window.markdownToolbar.
+	// Generation and document actions on the second toolbar row.
 	///////////////////////////////////////////////////////
 
 	function (editor) {
@@ -183,7 +176,9 @@ MarkdownEditor.builtinPlugins = [
 			{ id: 'markdown', label: 'Markdown (.md)' }
 			];
 
-		const state = { templates: [], template: null, templateName: null, format: null, outputFolder: null };
+		const state = {
+			template: null, templateName: null, kind: null, defaultFormat: null, formatOverride: null, outputFolder: null
+		};
 		const generateButtons = [];
 		const templateButtons = [];
 		const formatDropdowns = [];
@@ -215,7 +210,7 @@ MarkdownEditor.builtinPlugins = [
 
 		const updateGenerateButtons = () => {
 			for (const buttonView of generateButtons) {
-				buttonView.isEnabled = Boolean(state.template && state.format);
+				buttonView.isEnabled = Boolean(state.template);
 			}
 		};
 
@@ -229,67 +224,44 @@ MarkdownEditor.builtinPlugins = [
 		};
 
 		const updateFormatDropdowns = () => {
-			const selected = formatById(state.format);
+			const formatId = state.formatOverride || state.defaultFormat;
+			const selected = formatById(formatId);
 			for (const { dropdownView, items } of formatDropdowns) {
-				// Rebuild the list so the selection highlight always derives
-				// from state (bundled Model instances don't expose .get()).
 				items.clear();
-				for (const format of OUTPUT_FORMATS) {
+				for (const option of [{ id: '', label: 'Template default' }, ...OUTPUT_FORMATS]) {
+					if (state.kind === 'jinja' && option.id === 'docx') continue;
+					if (state.kind === 'mapping' && option.id === 'markdown') continue;
 					items.add({
 						type: 'button',
 						model: new Model({
-							label: format.label,
+							label: option.label,
 							withText: true,
-							isOn: format.id === state.format,
-							formatId: format.id
+							isOn: option.id === (state.formatOverride || ''),
+							formatId: option.id
 						})
 					});
 				}
-				dropdownView.buttonView.label = selected ? selected.label : 'Format';
-				dropdownView.buttonView.withText = Boolean(selected);
+				dropdownView.isEnabled = Boolean(state.template);
+				dropdownView.buttonView.label = selected?.label || formatId || 'Format';
+				dropdownView.buttonView.withText = Boolean(formatId);
 			}
 		};
 
-		// Public webview API used by the extension host messages (see
-		// markdownEditorInitScript.js).
 		window.markdownToolbar = {
 			getState: () => ({
 				template: state.template,
-				format: state.format,
-				templates: state.templates.slice(),
+				format: state.formatOverride || state.defaultFormat,
 				outputFolder: state.outputFolder
 			}),
-			setTemplates: (templates) => {
-				state.templates = Array.isArray(templates)
-					? templates.filter((template) => template && typeof template.path === 'string')
-					: [];
-				updateGenerateButtons();
-			},
-			// Generalized: (path) keeps the legacy call shape; (path, name,
-			// format) is used after the Template button's file browser picks a
-			// Jinja template (the extension host sends 'templatePicked').
-			setTemplate: (path, name, format) => {
-				if (typeof path !== 'string' || path === '') {
-					return;
-				}
+			setTemplate: (path, name, format, kind) => {
 				state.template = path;
-				state.templateName =
-					typeof name === 'string' && name !== '' ? name : path.split(/[\\/]/).pop();
-				if (format && formatById(format)) {
-					state.format = format;
-					updateFormatDropdowns();
-				}
+				state.templateName = name;
+				state.kind = kind;
+				state.defaultFormat = format;
+				state.formatOverride = null;
 				updateTemplateButtons();
+				updateFormatDropdowns();
 				updateGenerateButtons();
-				postMessage({ type: 'templateSelected', template: path, format: state.format });
-			},
-			setFormat: (format) => {
-				if (formatById(format)) {
-					state.format = format;
-					updateFormatDropdowns();
-					updateGenerateButtons();
-					postMessage({ type: 'formatSelected', format });
-				}
 			},
 			setOutputFolder: (folder) => {
 				state.outputFolder = typeof folder === 'string' && folder !== '' ? folder : null;
@@ -311,22 +283,18 @@ MarkdownEditor.builtinPlugins = [
 				isEnabled: false
 			});
 			editor.listenTo(buttonView, 'execute', () => {
-				postMessage({ type: 'generateRequest', template: state.template, format: state.format });
+				postMessage({ type: 'generateRequest', template: state.template, format: state.formatOverride });
 			});
 			generateButtons.push(buttonView);
 			return buttonView;
 		});
 
-		// The Template button opens the extension host's native file browser
-		// (see markdownEditor.ts pickTemplate). The picked Jinja template's
-		// name (and declared output format) are pushed back through
-		// window.markdownToolbar.setTemplate.
 		editor.ui.componentFactory.add('templateSelector', (locale) => {
 			const buttonView = new ButtonView(locale);
 			buttonView.set({
 				label: 'Template',
 				icon: TEMPLATE_ICON,
-				tooltip: 'Choose a conversion template (Jinja file)'
+				tooltip: 'Choose a Jinja or table-mapping template'
 			});
 			editor.listenTo(buttonView, 'execute', () => {
 				postMessage({ type: 'pickTemplate' });
@@ -346,10 +314,8 @@ MarkdownEditor.builtinPlugins = [
 				tooltip: 'Output file format'
 			});
 			editor.listenTo(dropdownView, 'execute', (evt) => {
-				state.format = evt.source.formatId;
-				postMessage({ type: 'formatSelected', format: state.format });
+				state.formatOverride = evt.source.formatId || null;
 				updateFormatDropdowns();
-				updateGenerateButtons();
 			});
 			formatDropdowns.push({ dropdownView, items });
 			updateFormatDropdowns();

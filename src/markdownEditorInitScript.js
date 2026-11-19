@@ -1,164 +1,90 @@
 //@ts-check
 
-// Get a reference to the VS Code webview api.
-// We use this API to post messages back to our extension.
-//
-// This must run before anything that can throw: the CKEditor instance
-// (window.editor) is created asynchronously by the inline script in the
-// webview HTML. If it is not ready yet, top-level editor access below would
-// throw and kill this script — leaving window.vscode unset and every
-// toolbar button (Template, Generate, output folder) silently dead.
-// eslint-disable-next-line no-undef
+// Share the API with the CKEditor toolbar before creating the editor.
 const vscode = acquireVsCodeApi();
 window.vscode = vscode;
-console.log('[markdown-editor] init script loaded — window.vscode ready');
 
-// We use this to track whether the document's initial content has been set yet
-var initializedFlag = false;
-
-// Wire up the editor-dependent parts once the CKEditor instance exists.
-function initWhenEditorReady() {
-	const editor = window.editor;
-	// A <div id="editor"> would also create a live window.editor property
-	// (named element lookup) — only the real CKEditor instance has a model.
-	if (!editor || !editor.model) {
-		// CKEditor is still creating itself; retry shortly.
-		setTimeout(initWhenEditorReady, 25);
-		return;
-	}
-	try {
-		initEditor(editor);
-	} catch (err) {
-		// Never die silently: a throw here used to leave every toolbar
-		// button dead with no trace in the UI.
-		console.error('[markdown-editor] init failed — toolbar buttons will not work:', err);
-	}
-}
-
-function initEditor(editor) {
-
-	// This will store the latest saved data from VS Code
-	editor.savedData = null;
-
-	editor.suppressNextDataChangeEvent = false;
-
-/**
- * Render the document in the webview.
- */
-function setEditorContent(/** @type {string} */ text) {
-	console.log('setEditorContent', { initializedFlag, text: JSON.stringify(text) });
-
-	// We use setData instead of editor.model.change for initial content otherwise undo history starts with empty content
-	if (!initializedFlag) {
-		editor.setData(text);
-		initializedFlag = true;
-		return;
-	}
-
-	// If the new text doesn't match the editor's current text, we need to update it but preserve the selection.
-	if (editor.getData() != text) {
-		// Save selection so we can restore it after replacing the content
-		const userSelection = editor.model.document.selection.getFirstRange();
-
-		// Replace all content but calling insertContent with the whole document range as a selection
-		const selectionRange = editor.model.createRangeIn(editor.model.document.getRoot());
-		const viewFragment = editor.data.processor.toView(text);
-		const modelFragment = editor.data.toModel(viewFragment);
-		editor.model.insertContent(modelFragment, selectionRange);
-
-		editor.model.change((writer) => {
-			try {
-				writer.setSelection(userSelection);
-			} catch {
-				// Backup selection to use if userSelection became invalid after replacing content
-				// Usually userSelection should only become invalid if the document got shorter (its now out of bounds)
-				// so in that case we should put the cursor at the end of the last line in the document
-				let lastElement = editor.model.document
-					.getRoot()
-					.getChild(editor.model.document.getRoot().childCount - 1);
-				editor.model.change((writer) => {
-					writer.setSelection(lastElement, 'after');
-				});
-			}
-		});
-	}
-
-	// Keep track of this to check if document is really dirty in change:data event
-	editor.savedData = editor.getData();
-}
-
-// Add listener for user modifying text in the editor
-editor.model.document.on('change:data', (e) => {
-	// This happens when the even was triggered by documentChanged event rather than user input
-	if (editor.suppressNextDataChangeEvent) {
-		editor.suppressNextDataChangeEvent = false;
-		return;
-	}
-
-	const data = editor.getData();
-	vscode.postMessage({
-		type: 'webviewChanged',
-		text: data,
-	});
-
-	editor.dirty = true;
+void startEditor().catch((error) => {
+	console.error('Markdown Editor could not start:', error);
+	const status = document.getElementById('editor-startup-error');
+	status.hidden = false;
+	status.textContent = 'Markdown Editor could not start. Reopen the editor tab or open the Markdown source.';
 });
 
-// Handle messages sent from the extension to the webview
-window.addEventListener('message', (event) => {
-	console.log('Recieved Message', { 'event.data': JSON.stringify(event.data) });
-	const message = event.data; // The data that the extension sent
-	switch (message.type) {
-		case 'documentChanged': {
-			const text = message.text;
-			editor.suppressNextDataChangeEvent = true;
+async function startEditor() {
+	const editor = await MarkdownEditor.create(document.getElementById('mdwysiwyg-root'));
+	window.editor = editor;
+	editor.timeLastModified = new Date();
+	wireEditor(editor);
+}
+
+function wireEditor(editor) {
+	let initialized = false;
+	let applyingHostContent = false;
+
+	/**
+	 * Render the document in the webview.
+	 */
+	function setEditorContent(/** @type {string} */ text) {
+		// We use setData instead of editor.model.change for initial content otherwise undo history starts with empty content
+		if (!initialized) {
+			editor.setData(text);
+			initialized = true;
+			return;
+		}
+
+		// If the new text doesn't match the editor's current text, we need to update it but preserve the selection.
+		if (editor.getData() !== text) {
+			// Save selection so we can restore it after replacing the content
+			const userSelection = editor.model.document.selection.getFirstRange();
+
+			// Replace all content but calling insertContent with the whole document range as a selection
+			const selectionRange = editor.model.createRangeIn(editor.model.document.getRoot());
+			const viewFragment = editor.data.processor.toView(text);
+			const modelFragment = editor.data.toModel(viewFragment);
+			editor.model.insertContent(modelFragment, selectionRange);
+
+			editor.model.change((writer) => {
+				try {
+					writer.setSelection(userSelection);
+				} catch {
+					writer.setSelection(editor.model.document.getRoot(), 'end');
+				}
+			});
+		}
+	}
+
+	function applyHostContent(text) {
+		applyingHostContent = true;
+		try {
 			setEditorContent(text);
-
-			// This state is returned in the call to `vscode.getState` below when a webview is reloaded.
-			vscode.setState({ text });
-			break;
-		}
-		case 'templates': {
-			// The extension host pushes the workspace template list into the
-			// toolbar's template selector (see the code generation plugin in
-			// ckeditor5-build-markdown/src/ckeditor.js).
-			if (window.markdownToolbar) {
-				window.markdownToolbar.setTemplates(message.templates);
-			}
-			break;
-		}
-		case 'templatePicked': {
-			// The toolbar's Template button opened a file browser; the host
-			// reports the picked Jinja template (path, display name and the
-			// output format declared in its front matter, when any).
-			if (window.markdownToolbar) {
-				window.markdownToolbar.setTemplate(message.path, message.name, message.format);
-			}
-			break;
-		}
-		case 'outputFolder': {
-			// The chosen generation output folder (set through the toolbar
-			// file-browser button or the markdownEditor.outputFolder setting).
-			if (window.markdownToolbar) {
-				window.markdownToolbar.setOutputFolder(message.folder || '');
-			}
-			break;
-		}
-		case 'scrollChanged': {
-			// TODO
+		} finally {
+			applyingHostContent = false;
 		}
 	}
-});
-
-// Webviews are normally torn down when not visible and re-created when they become visible again.
-// State lets us save information across these re-loads
-const state = vscode.getState();
-if (state) {
-	setEditorContent(state.text);
-}
-
-	vscode.postMessage({
-		type: 'initialized',
+	// A host update can emit zero or several changes. Suppress only during that update.
+	editor.model.document.on('change:data', () => {
+		if (!applyingHostContent) {
+			vscode.postMessage({ type: 'webviewChanged', text: editor.getData() });
+		}
 	});
+
+	window.addEventListener('message', ({ data: message }) => {
+		switch (message?.type) {
+			case 'documentChanged':
+				applyHostContent(message.text);
+				vscode.setState({ text: message.text });
+				break;
+			case 'templatePicked':
+				window.markdownToolbar.setTemplate(message.path, message.name, message.format, message.kind);
+				break;
+			case 'outputFolder':
+				window.markdownToolbar.setOutputFolder(message.folder || '');
+				break;
+		}
+	});
+
+	const state = vscode.getState();
+	if (typeof state?.text === 'string') applyHostContent(state.text);
+	vscode.postMessage({ type: 'initialized' });
 }
-initWhenEditorReady();
