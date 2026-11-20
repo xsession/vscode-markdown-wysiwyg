@@ -1,4 +1,6 @@
 import type { CreatedTemplate } from './createJinjaTemplate';
+import { normalizeOutputFormat, renderJinjaConversion } from './jinjaConversion';
+import { assertOutputDocumentIsClean, readJinjaText, sameJinjaFile } from './runJinjaTemplate';
 import * as path from 'path';
 import * as fs from 'fs';
 import * as vscode from 'vscode';
@@ -6,7 +8,7 @@ import { extensionState } from './extension';
 import { generateFromTemplate, extensionForFormat, GenerationError, TemplateMapping } from './codeGenerator';
 import { canImportMapping, importMappedOutput, preserveMappingMarkers } from './outputImport';
 import { importRegisterMap } from './registerMapImport';
-import { renderTemplate, splitTemplateFile, TemplateError } from './jinjaTemplate';
+import { renderTemplate, splitTemplateFile } from './jinjaTemplate';
 import {
 	buildMarkdownContext,
 	fingerprintsFromDocument,
@@ -33,16 +35,6 @@ function readTableMapping(raw: string): TemplateMapping {
 		throw new GenerationError('The table template requires "markdown", "output", "table" and "columns".');
 	}
 	return mapping;
-}
-
-function normalizeOutputFormat(format: string): string {
-	const name = format.trim().toLowerCase();
-	switch (name) {
-		case 'yml': return 'yaml';
-		case 'htm': return 'html';
-		case 'md': return 'markdown';
-		default: return name;
-	}
 }
 
 function mappingOutputFormat(mapping: TemplateMapping): string {
@@ -215,10 +207,8 @@ export class MarkdownEditorProvider implements vscode.CustomTextEditorProvider {
 		if (await fs.promises.readFile(link.outputAbs, 'utf8') !== link.outputBaseline) {
 			throw new GenerationError('Output sync paused because the generated file also changed. Both files were kept.');
 		}
-		const { params, body } = splitTemplateFile(await fs.promises.readFile(link.templatePath, 'utf8'));
-		const context = buildMarkdownContext(source, path.basename(document.fileName));
-		context.params = params;
-		const output = renderTemplate(body, context);
+		const raw = await readJinjaText(vscode.Uri.file(link.templatePath));
+		const { output } = renderJinjaConversion(raw, source, document.fileName, link.format);
 		if (link.disposed || outputDocument?.isDirty || document.getText() !== source) return;
 		if (await fs.promises.readFile(link.outputAbs, 'utf8') !== link.outputBaseline ||
 			link.disposed || outputDocument?.isDirty || document.getText() !== source) return;
@@ -325,7 +315,7 @@ export class MarkdownEditorProvider implements vscode.CustomTextEditorProvider {
 		switch (command) {
 			case 'markdownEditor.createJinjaTemplate': {
 				const template = await vscode.commands.executeCommand<CreatedTemplate | undefined>(command, document.uri);
-				if (template?.sourceUri === document.uri.toString()) {
+				if (template && sameJinjaFile(vscode.Uri.parse(template.sourceUri), document.uri)) {
 					await panel.webview.postMessage({ type: 'templatePicked', kind: 'jinja', ...template });
 				}
 				break;
@@ -490,62 +480,19 @@ export class MarkdownEditorProvider implements vscode.CustomTextEditorProvider {
 		webviewPanel: vscode.WebviewPanel
 	): Promise<void> {
 		const templatePath: string = e.template;
-		const format = typeof e.format === 'string' ? normalizeOutputFormat(e.format) : null;
-		const baseName = path.basename(templatePath);
-
-		let raw: string;
-		try {
-			raw = await fs.promises.readFile(templatePath, 'utf8');
-		} catch (err: any) {
-			vscode.window.showErrorMessage(
-				`Markdown Editor: could not read template "${baseName}": ${err?.message ?? err}`
-			);
-			return;
-		}
-
-		const { metadata, params, body } = splitTemplateFile(raw);
-		if (!body.trim()) {
-			vscode.window.showErrorMessage(
-				`Markdown Editor: template "${baseName}" has no Jinja body.`
-			);
-			return;
-		}
-		const requestedFormat = format ?? normalizeOutputFormat(metadata.format || 'yaml');
-		if (!/^[a-z0-9_-]+$/.test(requestedFormat)) {
-			throw new GenerationError('Choose a valid output format.');
-		}
-		if (requestedFormat === 'docx') {
-			throw new GenerationError('Choose a table-template mapping to generate a Word document.');
-		}
-
-		let outAbs: string;
-		let output: string;
+		const raw = await readJinjaText(vscode.Uri.file(templatePath));
 		const sourceBaseline = document.getText();
-		let usedFolder = '';
-		try {
-			const context = buildMarkdownContext(sourceBaseline, path.basename(document.fileName));
-			context.params = params;
-			output = renderTemplate(body, context);
-			// Output name: the template's "output" basename when declared,
-			// otherwise the opened document's basename; extension from format.
-			const base = metadata.output
-				? path.basename(metadata.output).replace(/\.[^.]+$/, '')
-				: path.basename(document.fileName).replace(/\.[^.]+$/, '');
-			usedFolder = currentOutputFolder();
-			outAbs = path.join(
-				usedFolder || path.dirname(templatePath),
-				base + '.' + extensionForFormat(requestedFormat)
-			);
-			assertOutputIsSeparate(outAbs, document.fileName, templatePath);
-			await this.releaseOutput(outAbs);
-			await fs.promises.mkdir(path.dirname(outAbs), { recursive: true });
-			await fs.promises.writeFile(outAbs, output, 'utf8');
-		} catch (err: any) {
-			const message =
-				err instanceof TemplateError ? err.message : `generation failed: ${err?.message ?? err}`;
-			vscode.window.showErrorMessage(`Markdown Editor: ${message}`);
-			return;
-		}
+		const override = typeof e.format === 'string' ? e.format : undefined;
+		const { metadata, output, outputName, format: requestedFormat } =
+			renderJinjaConversion(raw, sourceBaseline, document.fileName, override);
+		const usedFolder = currentOutputFolder();
+		const outAbs = path.join(usedFolder || path.dirname(templatePath), outputName);
+		assertOutputIsSeparate(outAbs, document.fileName, templatePath);
+		assertOutputDocumentIsClean(vscode.Uri.file(outAbs));
+		await this.releaseOutput(outAbs);
+		await fs.promises.mkdir(path.dirname(outAbs), { recursive: true });
+		assertOutputDocumentIsClean(vscode.Uri.file(outAbs));
+		await fs.promises.writeFile(outAbs, output, 'utf8');
 
 		const rel = vscode.workspace.asRelativePath(outAbs, true) || outAbs;
 		const folderNote = usedFolder

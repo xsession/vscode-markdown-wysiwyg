@@ -1,13 +1,13 @@
 import * as path from 'path';
 import { safeLoad } from 'js-yaml';
+import { normalizeOutputFormat, renderJinjaConversion } from './jinjaConversion';
 import { buildMarkdownContext, ParsedTable } from './markdownTables';
-import { renderTemplate, splitTemplateFile, yamlScalar } from './jinjaTemplate';
+import { renderTemplate, yamlScalar } from './jinjaTemplate';
 
 type Scalar = string | number | boolean;
 type Binding = { expression: string; value: Scalar };
 type Collection = { expression: string; records: Binding[][] };
 
-const aliases = new Map([['yml', 'yaml'], ['md', 'markdown'], ['htm', 'html']]);
 const isScalar = (value: unknown): value is Scalar =>
 	typeof value === 'string' || typeof value === 'number' || typeof value === 'boolean';
 const index = (key: string | number) => '[' + JSON.stringify(key) + ']';
@@ -216,7 +216,7 @@ export function generateJinjaFromExample(sourceText: string, sourceFile: string,
 	const sourceName = path.basename(sourceFile);
 	const exampleName = path.basename(expectedFile);
 	const extension = (exampleName === '.env' ? 'env' : path.extname(exampleName).slice(1)).toLowerCase();
-	const format = aliases.get(extension) || (/^[a-z0-9_-]+$/.test(extension) ? extension : 'txt');
+	const format = /^[a-z0-9_-]+$/.test(extension) ? normalizeOutputFormat(extension) : 'txt';
 	if (format === 'docx') throw new Error('Jinja templates generate text. Choose a text output example.');
 	if (format === 'json') JSON.parse(expected);
 	if (format === 'yaml') safeLoad(expected);
@@ -243,9 +243,8 @@ export function generateJinjaFromExample(sourceText: string, sourceFile: string,
 	}
 	const name = path.basename(sourceName, path.extname(sourceName)).replace(/[\r\n'"]/g, ' ').trim() + ' conversion';
 	const output = /^['"]|['"]$|[\r\n]/.test(exampleName) ? '' : 'output: ' + exampleName + '\n';
-	const template = '---\nname: ' + name + '\nformat: ' + format + '\n' + output + '---\n' + prologue + result.body;
-	const parsed = splitTemplateFile(template);
-	if (renderTemplate(parsed.body, { ...context, params: parsed.params }) !== expected) {
+	const template = '---\nname: ' + name + '\nformat: ' + format + '\nexample_generated: true\n' + output + '---\n' + prologue + result.body;
+	if (renderJinjaConversion(template, sourceText, sourceName).output !== expected) {
 		throw new Error('The generated template could not be verified with its metadata.');
 	}
 	return { template, name, format, bindings: result.bindings, loop };

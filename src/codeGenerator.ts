@@ -42,7 +42,8 @@ const EXTENSIONS: { [format: string]: string } = {
 
 /** Extension to use for a selected output format (falls back to the format name). */
 export function extensionForFormat(format: string): string {
-	return EXTENSIONS[format.toLowerCase()] || format.toLowerCase();
+	const key = format.toLowerCase();
+	return Object.prototype.hasOwnProperty.call(EXTENSIONS, key) ? EXTENSIONS[key] : key;
 }
 
 /** Extract the marked table as [headerRow, ...dataRows] of raw cell strings. */

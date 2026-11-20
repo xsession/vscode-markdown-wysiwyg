@@ -1,3 +1,4 @@
+import { runJinjaTemplate } from './runJinjaTemplate';
 import { createJinjaTemplate } from './createJinjaTemplate';
 import {ProjectListening} from './projectListening';
 import {LocalAssistant} from './localAssistant';
@@ -87,6 +88,14 @@ export function activate(context: vscode.ExtensionContext) {
 	registerCommand('markdownEditor.createJinjaTemplate', async (source?: vscode.Uri) => {
 		try {
 			return await createJinjaTemplate(source ?? vscode.window.activeTextEditor?.document.uri);
+		} catch (error) {
+			void vscode.window.showErrorMessage('Markdown Editor: ' + (error instanceof Error ? error.message : String(error)));
+		}
+	});
+
+	registerCommand('markdownEditor.runJinjaTemplate', async (source?: vscode.Uri, template?: vscode.Uri, destination?: vscode.Uri) => {
+		try {
+			return await runJinjaTemplate(source, template, destination);
 		} catch (error) {
 			void vscode.window.showErrorMessage('Markdown Editor: ' + (error instanceof Error ? error.message : String(error)));
 		}

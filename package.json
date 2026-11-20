@@ -27,6 +27,7 @@
     "onCustomEditor:markdownEditor.customEditor",
     "onCommand:markdownEditor.openCustomEditor",
     "onCommand:markdownEditor.createJinjaTemplate",
+    "onCommand:markdownEditor.runJinjaTemplate",
     "onCommand:markdownEditor.readAloud",
     "onCommand:markdownEditor.readSelection",
     "onCommand:markdownEditor.listeningGuide",
@@ -66,6 +67,10 @@
       }
     ],
     "commands": [
+      {
+        "command": "markdownEditor.runJinjaTemplate",
+        "title": "Markdown Editor: Run Jinja Template"
+      },
       {
         "command": "markdownEditor.createJinjaTemplate",
         "title": "Markdown Editor: Create Jinja Template from Examples",

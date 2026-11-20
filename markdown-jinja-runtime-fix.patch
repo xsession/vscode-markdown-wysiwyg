@@ -1,0 +1,634 @@
+diff --git a/JINJA-TEMPLATES.md b/JINJA-TEMPLATES.md
+index 85efefaf2a52b6f9431735df9948dac695e94b7e..b6a92f87774efb0d5c12ff90dfd4d74750d46906 100644
+--- a/JINJA-TEMPLATES.md
++++ b/JINJA-TEMPLATES.md
+@@ -32,10 +32,17 @@ before relying on it for a different document. Content with no identifiable
+ source match stays literal. Add calculated transformations or reverse sync
+ rules by editing the generated template.
+ 
+-If you create the template from the Markdown file open in the toolbar, the
+-editor selects the new template automatically. Choose an output folder and
+-press **Generate** to run it. The example's filename supplies the default
+-output name.
++Once saved, choose **Run Template** in the notification to run it against
++the selected source and choose an output file. You can also run
++**Markdown Editor: Run Jinja Template** from the Command Palette and choose
++any supported text source and an existing `.j2` file. JSON and YAML sources
++can stay open in the standard VS Code editor.
++
++If you create the template from the Markdown file open in the WYSIWYG
++toolbar, it becomes the current template there. **Generate** then uses the
++toolbar's output folder. The example filename supplies the default name,
++including an extension such as `.yaml`. Example-derived JSON and YAML
++output is revalidated on each run before writing.
+ 
+ ## Template file format
+ 
+diff --git a/package.json b/package.json
+index 80902e8e28990240a59ca3fcbd9eb3ce1d3258f2..1a8e97df050ae833254b5a5ac9d250dfb0211541 100644
+--- a/package.json
++++ b/package.json
+@@ -27,6 +27,7 @@
+     "onCustomEditor:markdownEditor.customEditor",
+     "onCommand:markdownEditor.openCustomEditor",
+     "onCommand:markdownEditor.createJinjaTemplate",
++    "onCommand:markdownEditor.runJinjaTemplate",
+     "onCommand:markdownEditor.readAloud",
+     "onCommand:markdownEditor.readSelection",
+     "onCommand:markdownEditor.listeningGuide",
+@@ -66,6 +67,10 @@
+       }
+     ],
+     "commands": [
++      {
++        "command": "markdownEditor.runJinjaTemplate",
++        "title": "Markdown Editor: Run Jinja Template"
++      },
+       {
+         "command": "markdownEditor.createJinjaTemplate",
+         "title": "Markdown Editor: Create Jinja Template from Examples",
+diff --git a/src/codeGenerator.ts b/src/codeGenerator.ts
+index 60f853f049d3fa98b774088f1da68a8609029218..9c6579b8fccefb8c6aea0cd8dbec01e3497d7a18 100644
+--- a/src/codeGenerator.ts
++++ b/src/codeGenerator.ts
+@@ -42,7 +42,8 @@ const EXTENSIONS: { [format: string]: string } = {
+ 
+ /** Extension to use for a selected output format (falls back to the format name). */
+ export function extensionForFormat(format: string): string {
+-	return EXTENSIONS[format.toLowerCase()] || format.toLowerCase();
++	const key = format.toLowerCase();
++	return Object.prototype.hasOwnProperty.call(EXTENSIONS, key) ? EXTENSIONS[key] : key;
+ }
+ 
+ /** Extract the marked table as [headerRow, ...dataRows] of raw cell strings. */
+diff --git a/src/createJinjaTemplate.ts b/src/createJinjaTemplate.ts
+index 802a09ef6040319446829710dceba4eae5283622..4b3195a9eaa99d2ec688ffd87dfa655b4f279cb7 100644
+--- a/src/createJinjaTemplate.ts
++++ b/src/createJinjaTemplate.ts
+@@ -1,23 +1,11 @@
+ import * as path from 'path';
+-import { TextDecoder } from 'util';
+ import * as vscode from 'vscode';
+ import { generateJinjaFromExample } from './jinjaExampleGenerator';
++import { pickJinjaFile, readJinjaText, sameJinjaFile } from './runJinjaTemplate';
+ 
+ const templateExtensions = ['j2', 'jinja', 'jnt'];
+ const maxExampleBytes = 512 * 1024;
+ 
+-async function readExample(uri: vscode.Uri): Promise<string> {
+-	const open = vscode.workspace.textDocuments.find(document => document.uri.toString() === uri.toString());
+-	if (!open && (await vscode.workspace.fs.stat(uri)).size > maxExampleBytes) {
+-		throw new Error('Choose a UTF-8 text example of at most 512 KiB.');
+-	}
+-	const bytes = open ? Buffer.from(open.getText(), 'utf8') : await vscode.workspace.fs.readFile(uri);
+-	if (bytes.byteLength > maxExampleBytes || bytes.includes(0)) {
+-		throw new Error('Choose a UTF-8 text example of at most 512 KiB.');
+-	}
+-	return new TextDecoder('utf-8', { fatal: true }).decode(bytes);
+-}
+-
+ export interface CreatedTemplate {
+ 	sourceUri: string;
+ 	path: string;
+@@ -26,16 +14,12 @@ export interface CreatedTemplate {
+ }
+ 
+ export async function createJinjaTemplate(sourceHint?: vscode.Uri): Promise<CreatedTemplate | undefined> {
+-	const pick = async (openLabel: string, defaultUri?: vscode.Uri) => (await vscode.window.showOpenDialog({
+-		canSelectFiles: true, canSelectFolders: false, canSelectMany: false, openLabel, defaultUri
+-	}))?.[0];
+-
+-	const source = await pick('Select source example', sourceHint);
++	const source = await pickJinjaFile('Select source example', sourceHint);
+ 	if (!source) return;
+-	const expected = await pick('Select expected output example', vscode.Uri.joinPath(source, '..'));
++	const expected = await pickJinjaFile('Select expected output example', vscode.Uri.joinPath(source, '..'));
+ 	if (!expected) return;
+ 
+-	const [input, output] = await Promise.all([readExample(source), readExample(expected)]);
++	const [input, output] = await Promise.all([readJinjaText(source, maxExampleBytes), readJinjaText(expected, maxExampleBytes)]);
+ 	const result = generateJinjaFromExample(input, source.fsPath, output, expected.fsPath);
+ 	const target = await vscode.window.showSaveDialog({
+ 		saveLabel: 'Save verified Jinja template',
+@@ -46,15 +30,25 @@ export async function createJinjaTemplate(sourceHint?: vscode.Uri): Promise<Crea
+ 	if (!templateExtensions.includes(path.extname(target.path).slice(1).toLowerCase())) {
+ 		throw new Error('Save the template with a .j2, .jinja or .jnt extension.');
+ 	}
+-	const key = (uri: vscode.Uri) => process.platform === 'win32' ? uri.toString().toLowerCase() : uri.toString();
+-	if ([source, expected].some(uri => key(uri) === key(target))) {
++	if ([source, expected].some(uri => sameJinjaFile(uri, target))) {
+ 		throw new Error('Save the template as a separate file from both examples.');
+ 	}
+ 
+ 	await vscode.workspace.fs.writeFile(target, Buffer.from(result.template, 'utf8'));
+-	await vscode.window.showTextDocument(target, { viewColumn: vscode.ViewColumn.Beside, preserveFocus: true });
++	void Promise.resolve(vscode.window.showTextDocument(target, {
++		viewColumn: vscode.ViewColumn.Beside, preserveFocus: true
++	})).catch((error: unknown) => {
++		void vscode.window.showWarningMessage('Template saved, but VS Code could not open it: ' + String(error));
++	});
+ 	const count = result.bindings + (result.bindings === 1 ? ' source binding' : ' source bindings');
+-	void vscode.window.showInformationMessage('Jinja template reproduced the expected example with ' + count +
+-		(result.loop ? ' and a row loop.' : '.'));
++	void Promise.resolve(vscode.window.showInformationMessage(
++		'Jinja template saved and verified with ' + count + (result.loop ? ' and a row loop.' : '.'),
++		'Run Template'
++	)).then(choice => {
++		if (choice === 'Run Template') return vscode.commands.executeCommand('markdownEditor.runJinjaTemplate', source, target);
++	}).catch((error: unknown) => {
++		void vscode.window.showErrorMessage('Markdown Editor: ' + String(error));
++	});
++
+ 	return { sourceUri: source.toString(), path: target.fsPath, name: result.name, format: result.format };
+ }
+diff --git a/src/extension.ts b/src/extension.ts
+index 94de31ec386dfb53ddbab2c5ecb313bc988e2436..15f9b4a18dc6d2bc9cb6a8bddfc8869fd6021bc2 100644
+--- a/src/extension.ts
++++ b/src/extension.ts
+@@ -1,3 +1,4 @@
++import { runJinjaTemplate } from './runJinjaTemplate';
+ import { createJinjaTemplate } from './createJinjaTemplate';
+ import {ProjectListening} from './projectListening';
+ import {LocalAssistant} from './localAssistant';
+@@ -92,6 +93,14 @@ export function activate(context: vscode.ExtensionContext) {
+ 		}
+ 	});
+ 
++	registerCommand('markdownEditor.runJinjaTemplate', async (source?: vscode.Uri, template?: vscode.Uri, destination?: vscode.Uri) => {
++		try {
++			return await runJinjaTemplate(source, template, destination);
++		} catch (error) {
++			void vscode.window.showErrorMessage('Markdown Editor: ' + (error instanceof Error ? error.message : String(error)));
++		}
++	});
++
+ 	registerCommand('markdownEditor.openCustomEditor', async (uri: vscode.Uri) => {
+ 		// Sanity check. These cases shouldn't happen
+ 		if (vscode.window.activeTextEditor === undefined) {
+diff --git a/src/jinjaConversion.ts b/src/jinjaConversion.ts
+new file mode 100644
+index 0000000000000000000000000000000000000000..350bc702309cac05a98cbaa64f03fb8a192081ee
+--- /dev/null
++++ b/src/jinjaConversion.ts
+@@ -0,0 +1,48 @@
++import * as path from 'path';
++import { safeLoad } from 'js-yaml';
++import { extensionForFormat } from './codeGenerator';
++import { renderTemplate, splitTemplateFile, TemplateError } from './jinjaTemplate';
++import { buildMarkdownContext } from './markdownTables';
++
++const formatAliases = new Map([['yml', 'yaml'], ['htm', 'html'], ['md', 'markdown']]);
++
++export function normalizeOutputFormat(format: string): string {
++	const name = format.trim().toLowerCase();
++	return formatAliases.get(name) ?? name;
++}
++
++function filenameExtension(filename: string): string {
++	const ext = path.extname(filename);
++	return ext ? ext.slice(1) : /^\.[^.]+$/.test(filename) ? filename.slice(1) : '';
++}
++
++export function renderJinjaConversion(template: string, source: string, sourceName: string, override?: string) {
++	const { metadata, params, body } = splitTemplateFile(template);
++	if (!body.trim()) throw new TemplateError('The template has no Jinja body.');
++
++	const declaredFormat = normalizeOutputFormat(metadata.format || 'yaml');
++	const format = normalizeOutputFormat(override ?? declaredFormat);
++	if (!/^[a-z0-9_-]+$/.test(format)) throw new TemplateError('Choose a valid output format.');
++	if (format === 'docx') throw new TemplateError('Choose a table-template mapping to generate a Word document.');
++
++	const name = path.basename(sourceName);
++	const declaredName = metadata.output ? path.posix.basename(metadata.output.replace(/\\/g, '/')) : '';
++	const suffix = filenameExtension(declaredName);
++	const outputName = declaredName && normalizeOutputFormat(suffix) === format
++		? declaredName
++		: (declaredName || name).replace(/\.[^.]+$/, '') + '.' + extensionForFormat(format);
++
++	const context = buildMarkdownContext(source, name);
++	context.params = params;
++	const output = renderTemplate(body, context);
++	if (metadata.example_generated === 'true') {
++		try {
++			if (declaredFormat === 'json') JSON.parse(output);
++			if (declaredFormat === 'yaml') safeLoad(output);
++		} catch (error) {
++			throw new TemplateError('The example-derived template rendered invalid ' + declaredFormat.toUpperCase() + ': ' +
++				(error instanceof Error ? error.message : String(error)));
++		}
++	}
++	return { metadata, format, outputName, output };
++}
+diff --git a/src/jinjaExampleGenerator.ts b/src/jinjaExampleGenerator.ts
+index 45b6d0cb34d7e675395e6aa6f8f7bc7a2f38814c..4c18f5b2efac877fffd5ecc2f6ba0f70f525524b 100644
+--- a/src/jinjaExampleGenerator.ts
++++ b/src/jinjaExampleGenerator.ts
+@@ -1,13 +1,13 @@
+ import * as path from 'path';
+ import { safeLoad } from 'js-yaml';
++import { normalizeOutputFormat, renderJinjaConversion } from './jinjaConversion';
+ import { buildMarkdownContext, ParsedTable } from './markdownTables';
+-import { renderTemplate, splitTemplateFile, yamlScalar } from './jinjaTemplate';
++import { renderTemplate, yamlScalar } from './jinjaTemplate';
+ 
+ type Scalar = string | number | boolean;
+ type Binding = { expression: string; value: Scalar };
+ type Collection = { expression: string; records: Binding[][] };
+ 
+-const aliases = new Map([['yml', 'yaml'], ['md', 'markdown'], ['htm', 'html']]);
+ const isScalar = (value: unknown): value is Scalar =>
+ 	typeof value === 'string' || typeof value === 'number' || typeof value === 'boolean';
+ const index = (key: string | number) => '[' + JSON.stringify(key) + ']';
+@@ -216,7 +216,7 @@ export function generateJinjaFromExample(sourceText: string, sourceFile: string,
+ 	const sourceName = path.basename(sourceFile);
+ 	const exampleName = path.basename(expectedFile);
+ 	const extension = (exampleName === '.env' ? 'env' : path.extname(exampleName).slice(1)).toLowerCase();
+-	const format = aliases.get(extension) || (/^[a-z0-9_-]+$/.test(extension) ? extension : 'txt');
++	const format = /^[a-z0-9_-]+$/.test(extension) ? normalizeOutputFormat(extension) : 'txt';
+ 	if (format === 'docx') throw new Error('Jinja templates generate text. Choose a text output example.');
+ 	if (format === 'json') JSON.parse(expected);
+ 	if (format === 'yaml') safeLoad(expected);
+@@ -243,9 +243,8 @@ export function generateJinjaFromExample(sourceText: string, sourceFile: string,
+ 	}
+ 	const name = path.basename(sourceName, path.extname(sourceName)).replace(/[\r\n'"]/g, ' ').trim() + ' conversion';
+ 	const output = /^['"]|['"]$|[\r\n]/.test(exampleName) ? '' : 'output: ' + exampleName + '\n';
+-	const template = '---\nname: ' + name + '\nformat: ' + format + '\n' + output + '---\n' + prologue + result.body;
+-	const parsed = splitTemplateFile(template);
+-	if (renderTemplate(parsed.body, { ...context, params: parsed.params }) !== expected) {
++	const template = '---\nname: ' + name + '\nformat: ' + format + '\nexample_generated: true\n' + output + '---\n' + prologue + result.body;
++	if (renderJinjaConversion(template, sourceText, sourceName).output !== expected) {
+ 		throw new Error('The generated template could not be verified with its metadata.');
+ 	}
+ 	return { template, name, format, bindings: result.bindings, loop };
+diff --git a/src/jinjaTemplate.ts b/src/jinjaTemplate.ts
+index ee4ac50e1cc14904b4b68b8f70570eaa1e782e34..6682f69c50de9632ec67a51906628f1e69dceccb 100644
+--- a/src/jinjaTemplate.ts
++++ b/src/jinjaTemplate.ts
+@@ -1028,7 +1028,7 @@ export function splitTemplateFile(raw: string): TemplateFile {
+ 	}
+ 	const params: Record<string, string> = {};
+ 	for (const [k, v] of Object.entries(metadata)) {
+-		if (k !== 'name' && k !== 'format' && k !== 'output') params[k] = v;
++		if (k !== 'name' && k !== 'format' && k !== 'output' && k !== 'example_generated') params[k] = v;
+ 	}
+ 	return { metadata, params, body: src.slice(m[0].length) };
+ }
+diff --git a/src/markdownEditor.ts b/src/markdownEditor.ts
+index e3efa79c1244f0958ac63d7b7b79eaa4e7026023..4b35416d984bb777004cd91bfdf3d56785f87726 100644
+--- a/src/markdownEditor.ts
++++ b/src/markdownEditor.ts
+@@ -1,4 +1,6 @@
+ import type { CreatedTemplate } from './createJinjaTemplate';
++import { normalizeOutputFormat, renderJinjaConversion } from './jinjaConversion';
++import { assertOutputDocumentIsClean, readJinjaText, sameJinjaFile } from './runJinjaTemplate';
+ import * as path from 'path';
+ import * as fs from 'fs';
+ import * as vscode from 'vscode';
+@@ -6,7 +8,7 @@ import { extensionState } from './extension';
+ import { generateFromTemplate, extensionForFormat, GenerationError, TemplateMapping } from './codeGenerator';
+ import { canImportMapping, importMappedOutput, preserveMappingMarkers } from './outputImport';
+ import { importRegisterMap } from './registerMapImport';
+-import { renderTemplate, splitTemplateFile, TemplateError } from './jinjaTemplate';
++import { renderTemplate, splitTemplateFile } from './jinjaTemplate';
+ import {
+ 	buildMarkdownContext,
+ 	fingerprintsFromDocument,
+@@ -35,16 +37,6 @@ function readTableMapping(raw: string): TemplateMapping {
+ 	return mapping;
+ }
+ 
+-function normalizeOutputFormat(format: string): string {
+-	const name = format.trim().toLowerCase();
+-	switch (name) {
+-		case 'yml': return 'yaml';
+-		case 'htm': return 'html';
+-		case 'md': return 'markdown';
+-		default: return name;
+-	}
+-}
+-
+ function mappingOutputFormat(mapping: TemplateMapping): string {
+ 	const file = path.basename(mapping.output);
+ 	const extension = path.extname(file).slice(1) || (file.startsWith('.') ? file.slice(1) : '');
+@@ -215,10 +207,8 @@ export class MarkdownEditorProvider implements vscode.CustomTextEditorProvider {
+ 		if (await fs.promises.readFile(link.outputAbs, 'utf8') !== link.outputBaseline) {
+ 			throw new GenerationError('Output sync paused because the generated file also changed. Both files were kept.');
+ 		}
+-		const { params, body } = splitTemplateFile(await fs.promises.readFile(link.templatePath, 'utf8'));
+-		const context = buildMarkdownContext(source, path.basename(document.fileName));
+-		context.params = params;
+-		const output = renderTemplate(body, context);
++		const raw = await readJinjaText(vscode.Uri.file(link.templatePath));
++		const { output } = renderJinjaConversion(raw, source, document.fileName, link.format);
+ 		if (link.disposed || outputDocument?.isDirty || document.getText() !== source) return;
+ 		if (await fs.promises.readFile(link.outputAbs, 'utf8') !== link.outputBaseline ||
+ 			link.disposed || outputDocument?.isDirty || document.getText() !== source) return;
+@@ -325,7 +315,7 @@ export class MarkdownEditorProvider implements vscode.CustomTextEditorProvider {
+ 		switch (command) {
+ 			case 'markdownEditor.createJinjaTemplate': {
+ 				const template = await vscode.commands.executeCommand<CreatedTemplate | undefined>(command, document.uri);
+-				if (template?.sourceUri === document.uri.toString()) {
++				if (template && sameJinjaFile(vscode.Uri.parse(template.sourceUri), document.uri)) {
+ 					await panel.webview.postMessage({ type: 'templatePicked', kind: 'jinja', ...template });
+ 				}
+ 				break;
+@@ -490,62 +480,19 @@ export class MarkdownEditorProvider implements vscode.CustomTextEditorProvider {
+ 		webviewPanel: vscode.WebviewPanel
+ 	): Promise<void> {
+ 		const templatePath: string = e.template;
+-		const format = typeof e.format === 'string' ? normalizeOutputFormat(e.format) : null;
+-		const baseName = path.basename(templatePath);
+-
+-		let raw: string;
+-		try {
+-			raw = await fs.promises.readFile(templatePath, 'utf8');
+-		} catch (err: any) {
+-			vscode.window.showErrorMessage(
+-				`Markdown Editor: could not read template "${baseName}": ${err?.message ?? err}`
+-			);
+-			return;
+-		}
+-
+-		const { metadata, params, body } = splitTemplateFile(raw);
+-		if (!body.trim()) {
+-			vscode.window.showErrorMessage(
+-				`Markdown Editor: template "${baseName}" has no Jinja body.`
+-			);
+-			return;
+-		}
+-		const requestedFormat = format ?? normalizeOutputFormat(metadata.format || 'yaml');
+-		if (!/^[a-z0-9_-]+$/.test(requestedFormat)) {
+-			throw new GenerationError('Choose a valid output format.');
+-		}
+-		if (requestedFormat === 'docx') {
+-			throw new GenerationError('Choose a table-template mapping to generate a Word document.');
+-		}
+-
+-		let outAbs: string;
+-		let output: string;
++		const raw = await readJinjaText(vscode.Uri.file(templatePath));
+ 		const sourceBaseline = document.getText();
+-		let usedFolder = '';
+-		try {
+-			const context = buildMarkdownContext(sourceBaseline, path.basename(document.fileName));
+-			context.params = params;
+-			output = renderTemplate(body, context);
+-			// Output name: the template's "output" basename when declared,
+-			// otherwise the opened document's basename; extension from format.
+-			const base = metadata.output
+-				? path.basename(metadata.output).replace(/\.[^.]+$/, '')
+-				: path.basename(document.fileName).replace(/\.[^.]+$/, '');
+-			usedFolder = currentOutputFolder();
+-			outAbs = path.join(
+-				usedFolder || path.dirname(templatePath),
+-				base + '.' + extensionForFormat(requestedFormat)
+-			);
+-			assertOutputIsSeparate(outAbs, document.fileName, templatePath);
+-			await this.releaseOutput(outAbs);
+-			await fs.promises.mkdir(path.dirname(outAbs), { recursive: true });
+-			await fs.promises.writeFile(outAbs, output, 'utf8');
+-		} catch (err: any) {
+-			const message =
+-				err instanceof TemplateError ? err.message : `generation failed: ${err?.message ?? err}`;
+-			vscode.window.showErrorMessage(`Markdown Editor: ${message}`);
+-			return;
+-		}
++		const override = typeof e.format === 'string' ? e.format : undefined;
++		const { metadata, output, outputName, format: requestedFormat } =
++			renderJinjaConversion(raw, sourceBaseline, document.fileName, override);
++		const usedFolder = currentOutputFolder();
++		const outAbs = path.join(usedFolder || path.dirname(templatePath), outputName);
++		assertOutputIsSeparate(outAbs, document.fileName, templatePath);
++		assertOutputDocumentIsClean(vscode.Uri.file(outAbs));
++		await this.releaseOutput(outAbs);
++		await fs.promises.mkdir(path.dirname(outAbs), { recursive: true });
++		assertOutputDocumentIsClean(vscode.Uri.file(outAbs));
++		await fs.promises.writeFile(outAbs, output, 'utf8');
+ 
+ 		const rel = vscode.workspace.asRelativePath(outAbs, true) || outAbs;
+ 		const folderNote = usedFolder
+diff --git a/src/runJinjaTemplate.ts b/src/runJinjaTemplate.ts
+new file mode 100644
+index 0000000000000000000000000000000000000000..f4402ccb3b50705ab42d3cd4cb277c561fe0b7f9
+--- /dev/null
++++ b/src/runJinjaTemplate.ts
+@@ -0,0 +1,69 @@
++import * as path from 'path';
++import * as vscode from 'vscode';
++import { TextDecoder } from 'util';
++import { renderJinjaConversion } from './jinjaConversion';
++
++const templateExtensions = ['j2', 'jinja', 'jnt'];
++
++export async function pickJinjaFile(openLabel: string, defaultUri?: vscode.Uri, template = false): Promise<vscode.Uri | undefined> {
++	const files = await vscode.window.showOpenDialog({
++		canSelectFiles: true, canSelectFolders: false, canSelectMany: false, openLabel, defaultUri,
++		filters: template ? { 'Jinja templates': templateExtensions } : undefined
++	});
++	return files?.[0];
++}
++
++export function assertJinjaFilename(uri: vscode.Uri): void {
++	if (!templateExtensions.includes(path.extname(uri.path).slice(1).toLowerCase())) {
++		throw new Error('Choose a .j2, .jinja or .jnt template file.');
++	}
++}
++
++export function sameJinjaFile(left: vscode.Uri, right: vscode.Uri): boolean {
++	if (left.scheme === 'file' && right.scheme === 'file') {
++		const a = path.resolve(left.fsPath), b = path.resolve(right.fsPath);
++		return process.platform === 'win32' ? a.toLowerCase() === b.toLowerCase() : a === b;
++	}
++	return left.toString() === right.toString();
++}
++
++export async function readJinjaText(uri: vscode.Uri, maxBytes?: number): Promise<string> {
++	const open = vscode.workspace.textDocuments.find(document => sameJinjaFile(document.uri, uri));
++	const textLimit = 'Choose a UTF-8 text file' + (maxBytes ? ' of at most ' + maxBytes / 1024 + ' KiB.' : '.');
++	if (!open && maxBytes && (await vscode.workspace.fs.stat(uri)).size > maxBytes) throw new Error(textLimit);
++	const bytes = open ? Buffer.from(open.getText(), 'utf8') : await vscode.workspace.fs.readFile(uri);
++	if ((maxBytes && bytes.byteLength > maxBytes) || bytes.includes(0)) throw new Error(textLimit);
++	try {
++		return new TextDecoder('utf-8', { fatal: true }).decode(bytes);
++	} catch {
++		throw new Error(textLimit);
++	}
++}
++
++export function assertOutputDocumentIsClean(destination: vscode.Uri): void {
++	if (vscode.workspace.textDocuments.some(document => document.isDirty && sameJinjaFile(document.uri, destination))) {
++		throw new Error('The output file has unsaved changes. Save or close it before generating.');
++	}
++}
++
++export async function runJinjaTemplate(source?: vscode.Uri, template?: vscode.Uri, destination?: vscode.Uri): Promise<vscode.Uri | undefined> {
++	source ??= await pickJinjaFile('Select source file', vscode.window.activeTextEditor?.document.uri);
++	if (!source) return;
++	template ??= await pickJinjaFile('Select Jinja template', vscode.Uri.joinPath(source, '..'), true);
++	if (!template) return;
++	assertJinjaFilename(template);
++	const [input, definition] = await Promise.all([readJinjaText(source), readJinjaText(template)]);
++	const result = renderJinjaConversion(definition, input, path.posix.basename(source.path));
++	const outputUri = destination ?? await vscode.window.showSaveDialog({
++		saveLabel: 'Save generated output',
++		defaultUri: vscode.Uri.joinPath(source, '..', result.outputName)
++	});
++	if (!outputUri) return;
++	if ([source, template].some(uri => sameJinjaFile(uri, outputUri))) {
++		throw new Error('Choose an output file separate from the source and template.');
++	}
++	assertOutputDocumentIsClean(outputUri);
++	await vscode.workspace.fs.writeFile(outputUri, Buffer.from(result.output, 'utf8'));
++	await vscode.window.showTextDocument(outputUri, { viewColumn: vscode.ViewColumn.Beside, preserveFocus: true });
++	return outputUri;
++}
+diff --git a/tests/jinjaExampleGenerator.test.js b/tests/jinjaExampleGenerator.test.js
+index 9019a85eb030f0bc25dc729d4462a1cf84725fb7..dd9e787638ae59d5340dc2d23c4d861b91b8a26e 100644
+--- a/tests/jinjaExampleGenerator.test.js
++++ b/tests/jinjaExampleGenerator.test.js
+@@ -1,6 +1,7 @@
+ const assert = require('node:assert/strict');
+ const { safeLoad } = require('js-yaml');
+ const { renderTemplate, splitTemplateFile } = require('../out/jinjaTemplate');
++const { renderJinjaConversion } = require('../out/jinjaConversion');
+ const { generateJinjaFromExample } = require('../out/jinjaExampleGenerator');
+ const { buildMarkdownContext } = require('../out/markdownTables');
+ 
+@@ -30,6 +31,11 @@ const yaml = 'title: Ports\ndevices:\n  - label: UART\n    pins: 4\n  - label: S
+ const yamlTemplate = generateJinjaFromExample(source, filename, yaml, 'board.yaml');
+ assert.equal(yamlTemplate.loop, true);
+ assert.equal(render(yamlTemplate.template, source), yaml);
++assert.equal(renderJinjaConversion(yamlTemplate.template, source, filename).outputName, 'board.yaml');
++assert.equal(renderJinjaConversion(yamlTemplate.template, source, filename, 'json').outputName, 'board.json');
++assert.equal(renderJinjaConversion(jsonTemplate.template, source, filename).outputName, 'board.json');
++assert.throws(() => renderJinjaConversion(jsonTemplate.template, source.replace('UART | 4', 'UART | many'), filename),
++	/invalid JSON/);
+ assert.equal(safeLoad(render(yamlTemplate.template, modified.replace('I2C, fast', 'I2C: fast'))).devices[2].label, 'I2C: fast');
+ 
+ const structured = '{"devices":[{"bus":"UART","pins":4},{"bus":"SPI","pins":8}]}';
+@@ -48,27 +54,44 @@ console.log('Jinja example generator: exact examples, changed values, new rows,
+ async function testWizard() {
+ 	const Module = require('node:module');
+ 	const path = require('node:path');
+-	const uri = name => ({ path: '/examples/' + name, fsPath: '/examples/' + name,
++	const uri = name => ({ scheme: 'file', path: '/examples/' + name, fsPath: '/examples/' + name,
+ 		toString() { return this.path; } });
+-	const samples = new Map([[uri('ports.md').path, source], [uri('board.csv').path, csv]]);
+-	const selections = [uri('ports.md'), uri('board.csv')];
+-	const destination = uri('ports-conversion.j2');
++	const input = uri('ports.json');
++	const expected = uri('sample.csv');
++	const templateTarget = uri('ports-conversion.j2');
++	const outputTarget = uri('actual.csv');
++	const samples = new Map([[input.path, structured], [expected.path, csv]]);
++	const selections = [input, expected];
++	const destinations = [templateTarget, outputTarget];
+ 	const writes = [];
++	const opened = [];
++	const reported = [];
++	let launch;
++	let runJinjaTemplate;
+ 	const vscode = {
+ 		Uri: { joinPath: (base, ...parts) => uri(path.basename(path.join(base.path, ...parts))) },
+ 		ViewColumn: { Beside: 2 },
+ 		window: {
+ 			showOpenDialog: async () => selections.length ? [selections.shift()] : undefined,
+-			showSaveDialog: async () => destination,
+-			showTextDocument: async selected => assert.equal(selected, destination),
+-			showInformationMessage: async () => undefined
++			showSaveDialog: async () => destinations.shift(),
++			showTextDocument: async selected => opened.push(selected),
++			showInformationMessage: async (_message, choice) => choice,
++			showErrorMessage: message => reported.push(message)
+ 		},
++		commands: { executeCommand(command, ...args) {
++			assert.equal(command, 'markdownEditor.runJinjaTemplate');
++			launch = runJinjaTemplate(...args);
++			return launch;
++		} },
+ 		workspace: {
+ 			textDocuments: [],
+ 			fs: {
+ 				stat: async file => ({ size: Buffer.byteLength(samples.get(file.path)) }),
+ 				readFile: async file => Buffer.from(samples.get(file.path)),
+-				writeFile: async (file, bytes) => writes.push([file, bytes.toString()])
++				writeFile: async (file, bytes) => {
++					writes.push(file);
++					samples.set(file.path, bytes.toString());
++				}
+ 			}
+ 		}
+ 	};
+@@ -77,16 +100,29 @@ async function testWizard() {
+ 	try {
+ 		Module._load = function (id, ...args) { return id === 'vscode' ? vscode : original.call(this, id, ...args); };
+ 		({ createJinjaTemplate } = require('../out/createJinjaTemplate'));
++		({ runJinjaTemplate } = require('../out/runJinjaTemplate'));
+ 	} finally {
+ 		Module._load = original;
+ 	}
+ 	const saved = await createJinjaTemplate();
+-	assert.equal(saved.path, destination.fsPath);
+-	assert.equal(writes.length, 1);
+-	assert.equal(writes[0][0], destination);
+-	assert.equal(render(writes[0][1], source), csv);
++	assert.equal(saved.path, templateTarget.fsPath);
++	assert.equal(await launch, outputTarget);
++	assert.deepEqual(writes, [templateTarget, outputTarget]);
++	assert.deepEqual(opened, [templateTarget, outputTarget]);
++	assert.equal(samples.get(outputTarget.path), csv);
++	assert.equal(samples.get(expected.path), csv);
++	assert.deepEqual(reported, []);
++
++	vscode.workspace.textDocuments.push({ uri: input, getText: () => structured.replace('UART', 'Serial') });
++	selections.push(input, templateTarget);
++	destinations.push(outputTarget);
++	assert.equal(await runJinjaTemplate(), outputTarget);
++	assert.equal(samples.get(outputTarget.path), csv.replace('UART', 'Serial'));
++	await assert.rejects(runJinjaTemplate(input, templateTarget, input), /separate/);
++	vscode.workspace.textDocuments.push({ uri: outputTarget, isDirty: true });
++	await assert.rejects(runJinjaTemplate(input, templateTarget, outputTarget), /unsaved changes/);
+ 	assert.equal(await createJinjaTemplate(), undefined);
+-	assert.equal(writes.length, 1);
+-	console.log('Template wizard: source and expected-file selection, verified save, and cancellation passed');
++	assert.equal(writes.length, 3);
++	console.log('Template wizard and runner: JSON source, verified save, actual output, live buffer, conflicts, and cancellation passed');
+ }
+ testWizard().catch(error => { console.error(error); process.exitCode = 1; });
+diff --git a/tests/markdownToolbar.browser.js b/tests/markdownToolbar.browser.js
+index 49e44e127d94d1a34fe0a38b31ca2a2a1b8b24e0..5f39993a710dc2d58f74a4338abfe5c17f2dc656 100644
+--- a/tests/markdownToolbar.browser.js
++++ b/tests/markdownToolbar.browser.js
+@@ -50,7 +50,7 @@ async function run(browser, directory) {
+ 		get lineCount() { return text.split('\n').length; }
+ 	};
+ 	const vscode = {
+-		Uri: { file: uri, joinPath: (base, ...parts) => uri(path.join(base.fsPath, ...parts)) },
++		Uri: { file: uri, parse: uri, joinPath: (base, ...parts) => uri(path.join(base.fsPath, ...parts)) },
+ 		WorkspaceEdit: class { replace(_uri, _range, replacement) { this.text = replacement; } },
+ 		Range: class {},
+ 		RelativePattern: class {},
+@@ -60,7 +60,11 @@ async function run(browser, directory) {
+ 		commands: { async executeCommand(...args) {
+ 			commands.push(args);
+ 			if (args[0] === 'markdownEditor.createJinjaTemplate') {
+-				return { sourceUri: document.uri.toString(), path: 'from-examples.j2', name: 'Example-derived template', format: 'json' };
++				const { generateJinjaFromExample } = require('../out/jinjaExampleGenerator');
++				const generated = generateJinjaFromExample(text, source, '{"input":"source.md"}\n', 'Example-derived.JSON');
++				const savedTemplate = path.join(directory, 'from-examples.j2');
++				await fs.writeFile(savedTemplate, generated.template);
++				return { sourceUri: document.uri.toString(), path: savedTemplate, name: generated.name, format: generated.format };
+ 			}
+ 		} },
+ 		window: {
+@@ -319,7 +323,9 @@ async function run(browser, directory) {
+ 	assert.match(await fs.readFile(source, 'utf8'), /Edited from JSON/);
+ 
+ 	await button('Create Jinja template from examples').click();
+-	await button('Example-derived template').waitFor();
++	await button('source conversion').waitFor();
++	await button('Generate').click();
++	await waitForFile(path.join(output, 'Example-derived.JSON'), '{"input":"source.md"}\n');
+ 	assert.deepEqual(commands.find(args => args[0] === 'markdownEditor.createJinjaTemplate'),
+ 		['markdownEditor.createJinjaTemplate', document.uri]);
+ 

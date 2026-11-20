@@ -50,7 +50,7 @@ async function run(browser, directory) {
 		get lineCount() { return text.split('\n').length; }
 	};
 	const vscode = {
-		Uri: { file: uri, joinPath: (base, ...parts) => uri(path.join(base.fsPath, ...parts)) },
+		Uri: { file: uri, parse: uri, joinPath: (base, ...parts) => uri(path.join(base.fsPath, ...parts)) },
 		WorkspaceEdit: class { replace(_uri, _range, replacement) { this.text = replacement; } },
 		Range: class {},
 		RelativePattern: class {},
@@ -60,7 +60,11 @@ async function run(browser, directory) {
 		commands: { async executeCommand(...args) {
 			commands.push(args);
 			if (args[0] === 'markdownEditor.createJinjaTemplate') {
-				return { sourceUri: document.uri.toString(), path: 'from-examples.j2', name: 'Example-derived template', format: 'json' };
+				const { generateJinjaFromExample } = require('../out/jinjaExampleGenerator');
+				const generated = generateJinjaFromExample(text, source, '{"input":"source.md"}\n', 'Example-derived.JSON');
+				const savedTemplate = path.join(directory, 'from-examples.j2');
+				await fs.writeFile(savedTemplate, generated.template);
+				return { sourceUri: document.uri.toString(), path: savedTemplate, name: generated.name, format: generated.format };
 			}
 		} },
 		window: {
@@ -319,7 +323,9 @@ async function run(browser, directory) {
 	assert.match(await fs.readFile(source, 'utf8'), /Edited from JSON/);
 
 	await button('Create Jinja template from examples').click();
-	await button('Example-derived template').waitFor();
+	await button('source conversion').waitFor();
+	await button('Generate').click();
+	await waitForFile(path.join(output, 'Example-derived.JSON'), '{"input":"source.md"}\n');
 	assert.deepEqual(commands.find(args => args[0] === 'markdownEditor.createJinjaTemplate'),
 		['markdownEditor.createJinjaTemplate', document.uri]);
 

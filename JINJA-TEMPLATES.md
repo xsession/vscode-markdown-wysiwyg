@@ -32,10 +32,17 @@ before relying on it for a different document. Content with no identifiable
 source match stays literal. Add calculated transformations or reverse sync
 rules by editing the generated template.
 
-If you create the template from the Markdown file open in the toolbar, the
-editor selects the new template automatically. Choose an output folder and
-press **Generate** to run it. The example's filename supplies the default
-output name.
+Once saved, choose **Run Template** in the notification to run it against
+the selected source and choose an output file. You can also run
+**Markdown Editor: Run Jinja Template** from the Command Palette and choose
+any supported text source and an existing `.j2` file. JSON and YAML sources
+can stay open in the standard VS Code editor.
+
+If you create the template from the Markdown file open in the WYSIWYG
+toolbar, it becomes the current template there. **Generate** then uses the
+toolbar's output folder. The example filename supplies the default name,
+including an extension such as `.yaml`. Example-derived JSON and YAML
+output is revalidated on each run before writing.
 
 ## Template file format
 

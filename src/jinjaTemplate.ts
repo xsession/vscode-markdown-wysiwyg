@@ -1028,7 +1028,7 @@ export function splitTemplateFile(raw: string): TemplateFile {
 	}
 	const params: Record<string, string> = {};
 	for (const [k, v] of Object.entries(metadata)) {
-		if (k !== 'name' && k !== 'format' && k !== 'output') params[k] = v;
+		if (k !== 'name' && k !== 'format' && k !== 'output' && k !== 'example_generated') params[k] = v;
 	}
 	return { metadata, params, body: src.slice(m[0].length) };
 }
