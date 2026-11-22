@@ -51,7 +51,9 @@
     "onCommand:markdownEditor.listen.context",
     "onCommand:markdownEditor.listen.back",
     "onCommand:markdownEditor.listen.bookmark",
-    "onCommand:markdownEditor.codebaseMap.open"
+    "onCommand:markdownEditor.codebaseMap.open",
+    "onCommand:markdownEditor.codebaseMap.refresh",
+    "onWebviewPanel:markdownEditor.codebaseMap"
   ],
   "main": "./dist/extension",
   "contributes": {
@@ -204,9 +206,18 @@
       },
       {
         "command": "markdownEditor.codebaseMap.open",
-        "title": "Open codebase landscape map",
+        "title": "Open Codebase Map",
         "category": "Markdown Editor",
-        "icon": "$(globe)"
+        "icon": {
+          "light": "media/codebaseMap-light.svg",
+          "dark": "media/codebaseMap-dark.svg"
+        }
+      },
+      {
+        "command": "markdownEditor.codebaseMap.refresh",
+        "title": "Refresh Codebase Map",
+        "category": "Markdown Editor",
+        "icon": "$(refresh)"
       }
     ],
     "menus": {
@@ -423,6 +434,27 @@
           "type": "boolean",
           "default": true,
           "description": "Skip detected running page footers. Reader checkboxes remember workspace overrides."
+        },
+        "markdownEditor.codebaseMap.maxFiles": {
+          "type": "number",
+          "default": 12000,
+          "minimum": 100,
+          "maximum": 50000,
+          "description": "Maximum number of source files drawn on the codebase map. Files beyond the limit are left out, in path order."
+        },
+        "markdownEditor.codebaseMap.maxFileBytes": {
+          "type": "number",
+          "default": 1500000,
+          "minimum": 1024,
+          "description": "Files larger than this many bytes are left off the codebase map (generated or bundled code is usually this large)."
+        },
+        "markdownEditor.codebaseMap.exclude": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          },
+          "default": [],
+          "description": "Extra glob patterns left off the codebase map, in addition to files.exclude and build folders such as node_modules, dist and out. Example: **/generated/**"
         }
       }
     },

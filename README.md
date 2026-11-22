@@ -191,6 +191,21 @@ Indexing refreshes automatically after Markdown edits and file/workspace changes
 
 The source distribution intentionally excludes voice/runtime binaries. `npm ci`, `npm test`, and `npm run webpack` work without them. For a new fully offline VSIX, restore the six voice packs and native runtimes using the existing bundling scripts, then run `npm run test:package` and the normal packaging pipeline. `media/` is included in VSIX packaging.
 
+## Codebase map
+
+Run **Markdown Editor: Open Codebase Map** from the Command Palette, use the landscape icon in the **Documentation contents** title bar, or right-click a folder in the Explorer to map only that folder.
+
+The map draws the source code as terrain: top-level folders are islands, files are hills (height is lines of code or number of dependents), and imports are roads. The layout is deterministic, so the same project always produces the same map.
+
+- **Explore**: click a hill to see its imports and dependents; **Open file** (or double-click the selected hill) opens it beside the map, **Reveal in Explorer** shows it in the tree.
+- **Route**: step-by-step directions between two files along import edges.
+- **Walk**: a fixed tour of the most-imported files, starting from the entry point.
+- **Runtime**: load a CPU profile (speedscope JSON, `.cpuprofile` or folded stacks) to see where time is spent and which calls have no static import.
+
+Imports are recognised for JavaScript/TypeScript, Python, Go, Rust, Java/Kotlin/Scala, C#, C/C++, Ruby, PHP, Dart, Lua, CSS and HTML, plus Renode platform files. Git submodules are drawn as separate territories. Your trail and visited files are remembered per workspace.
+
+When source files change, the map shows a **Refresh** prompt; **Markdown Editor: Refresh Codebase Map** rescans. Build output and dependency folders (`node_modules`, `dist`, `out`, `build`, …) and `files.exclude` patterns are skipped. Settings: `markdownEditor.codebaseMap.maxFiles` (default 12,000), `maxFileBytes` (default 1.5 MB) and `exclude` (extra glob patterns). Files are read locally and never leave VS Code.
+
 ## One-click Windows offline build
 
 Install Node.js 22.13 or newer, then double-click `build.bat`. It installs npm dependencies, runs tests, prepares offline assets, verifies them, builds and packages `artifacts/markdown-listening-offline.vsix`. Internet is required for npm and any missing asset downloads.
