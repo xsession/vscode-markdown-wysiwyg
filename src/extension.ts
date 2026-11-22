@@ -5,6 +5,7 @@ import {LocalAssistant} from './localAssistant';
 import {DocumentLoader} from './documentLoader';
 import {isSupportedDocument, documentExtensions, importDocument} from './documentFormats';
 import { DocumentationExplorer } from './documentationExplorer';
+import { CodebaseMap } from './codebaseMap';
 import { VoiceManager } from './voiceManager';
 import { PiperReader } from './piperReader';
 import * as vscode from 'vscode';
@@ -38,7 +39,7 @@ export function activate(context: vscode.ExtensionContext) {
 	const loader = new DocumentLoader();
 	const explorer=new DocumentationExplorer(context,reader,loader);
 	project=new ProjectListening(context,reader,voices,loader,explorer,new LocalAssistant(context.extensionPath));
-	context.subscriptions.push(loader,explorer,project);
+	context.subscriptions.push(loader,explorer,project,new CodebaseMap(context));
 	for(const [command,action] of [['diagnostics','diagnostics'],['queue','queueProject'],['tour','tour']])context.subscriptions.push(vscode.commands.registerCommand('markdownEditor.workspace.'+command,async()=>{try{if(!reader.snapshot())await reader.open('# Listening workspace\n\nOpen a document, build a project tour, or add files to the listening queue.','Listening workspace','workspace:',false);await project.action(action,{});}catch(error){vscode.window.showErrorMessage(String(error));}}));
 	for(const action of ['play','stop','next','previous','nextHeading','previousHeading','context','back','bookmark','pause'])context.subscriptions.push(vscode.commands.registerCommand('markdownEditor.listen.'+action,()=>reader.control(action)));
 	const mindmapButton = vscode.window.createStatusBarItem(vscode.StatusBarAlignment.Left, 40);
