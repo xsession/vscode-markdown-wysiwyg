@@ -1,3 +1,7 @@
+# New: Codebase map
+
+See a project's source as a landscape: folders are islands, files are hills and imports are roads. Get directions between files, walk through the main landmarks, and overlay a CPU profile. See [docs/CODEBASE-MAP.md](docs/CODEBASE-MAP.md).
+
 # New in 0.16.0: Corporate Word templates
 
 Use existing DOCX/DOTX corporate templates with two-way Markdown table and tagged-text synchronization. Multiple tables, stable Word tags/captions, binary backups and lock detection are supported. See [DOCX-TEMPLATES.md](DOCX-TEMPLATES.md) and [corporate example](examples/table-sync/docx).
@@ -205,6 +209,8 @@ The map draws the source code as terrain: top-level folders are islands, files a
 Imports are recognised for JavaScript/TypeScript, Python, Go, Rust, Java/Kotlin/Scala, C#, C/C++, Ruby, PHP, Dart, Lua, CSS and HTML, plus Renode platform files. Git submodules are drawn as separate territories. Your trail and visited files are remembered per workspace.
 
 When source files change, the map shows a **Refresh** prompt; **Markdown Editor: Refresh Codebase Map** rescans. Build output and dependency folders (`node_modules`, `dist`, `out`, `build`, …) and `files.exclude` patterns are skipped. Settings: `markdownEditor.codebaseMap.maxFiles` (default 12,000), `maxFileBytes` (default 1.5 MB) and `exclude` (extra glob patterns). Files are read locally and never leave VS Code.
+
+The full guide, including supported languages, trace formats and limits, is in [docs/CODEBASE-MAP.md](docs/CODEBASE-MAP.md).
 
 ## One-click Windows offline build
 

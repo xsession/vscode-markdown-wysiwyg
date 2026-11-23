@@ -1,7 +1,7 @@
 {
   "name": "markdown-wysiwyg",
   "displayName": "Markdown Editor",
-  "description": "Offline project documentation listening workspace, mind map, Piper voices and local AI",
+  "description": "Offline project documentation listening workspace, mind map, codebase map, Piper voices and local AI",
   "version": "0.13.1",
   "publisher": "adamerose",
   "private": true,

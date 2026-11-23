@@ -28,6 +28,14 @@ Communication between the webview and VS Code is done using `vscode.postMessage`
 
 The method `getHtmlForWebview` defines what this webview looks like, in our case importing and rendering a custom CKEditor5 build for markdown from the folder `ckeditor5-build-markdown`. It then runs `markdownEditorInitScript` inside the webview to register.
 
+## Codebase map
+
+`src/codebaseMap.ts` owns the **Codebase map** webview panel (`markdownEditor.codebaseMap`). The extension side finds and reads the source files (`collectSources`, honouring `files.exclude` and the `markdownEditor.codebaseMap.*` settings) plus the git metadata used for submodules, and streams them to the webview in batches. All analysis and drawing happen in the webview: `media/codebaseMap.js` (import detection, layout, terrain, rendering, route/walk/runtime modes), `media/codebaseMap.css` and the markup in `media/codebaseMap.body.html`, which the extension wraps in a nonce-protected page.
+
+Messages, webview → extension: `ready`, `refresh`, `scan`, `pickFolder`, `open {path}`, `reveal {path}`, `store {key, value}`. Extension → webview: `begin {scan, name, store, maxFiles}`, `files {scan, files}`, `end {scan, cut}`, `status {text, sticky}`, `stale`. Each scan has an id and the webview ignores batches from an older scan. Paths are relative to the mapped root (prefixed with the root name in multi-root workspaces); `CodebaseMap.resolve` maps them back and refuses anything outside the roots.
+
+The file extensions in `MAP_EXTENSIONS` must match `LANG` in `media/codebaseMap.js`; `tests/codebaseMap.test.js` checks this. A panel serializer restores the map after a window reload. User guide: `docs/CODEBASE-MAP.md`.
+
 # TODO
 
 - Add autolink to CKE editor
