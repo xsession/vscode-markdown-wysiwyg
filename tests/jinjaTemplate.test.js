@@ -5,6 +5,8 @@ const { renderTemplate, splitTemplateFile, sizeBits, accessFlags, descBase, arra
 const { parseMarkdownTables, buildMarkdownContext, splitTableCells, buildRegisterRows, rowDoc, rowSubRows, findRegisterSpan, fingerprintsFromDocument, diffFingerprints } = require('../out/markdownTables');
 
 const eq = (a, b, msg) => assert.strictEqual(a, b, msg);
+// Read text files as LF, so a CRLF checkout (core.autocrlf on Windows) compares the same.
+const readText = (file) => fs.readFileSync(file, 'utf8').replace(/\r\n/g, '\n');
 
 // --------------------------------------------------------------------------- //
 // Expression language
@@ -191,17 +193,17 @@ eq(tf2.body, 'plain body, no front matter', 'no front matter -> whole file is bo
 // demo_fpga_types.yaml (see tests/fixtures/).
 // --------------------------------------------------------------------------- //
 const root = path.join(__dirname, '..');
-const raw = fs.readFileSync(path.join(root, 'templates', 'register-map-to-yaml.j2'), 'utf8');
+const raw = readText(path.join(root, 'templates', 'register-map-to-yaml.j2'));
 const { metadata, params, body } = splitTemplateFile(raw);
 eq(metadata.name, 'Register map to YAML', 'bundled template name');
 eq(metadata.format, 'yaml', 'bundled template format');
 eq(params.struct_name, 'demoFpgaRegs', 'bundled template struct param');
 
-const demoMd = fs.readFileSync(path.join(__dirname, 'fixtures', 'register-map-demo.md'), 'utf8');
+const demoMd = readText(path.join(__dirname, 'fixtures', 'register-map-demo.md'));
 const demoCtx = buildMarkdownContext(demoMd, 'demo_fpga_types.md');
 demoCtx.params = params;
 const out = renderTemplate(body, demoCtx);
-const expected = fs.readFileSync(path.join(__dirname, 'fixtures', 'register-map-demo.expected.yaml'), 'utf8');
+const expected = readText(path.join(__dirname, 'fixtures', 'register-map-demo.expected.yaml'));
 eq(out, expected, 'rendered output matches expected YAML byte-for-byte');
 
 // Structural checks on the generated YAML (line-based; no YAML dep in the
@@ -245,7 +247,7 @@ for (const l of lines) {
 // Register-map document style 2: one-line register rows + prose + nested
 // tables as separate lines (pab1_fpga_types.md), merged into register rows.
 // --------------------------------------------------------------------------- //
-const pab1Md = fs.readFileSync(path.join(__dirname, 'fixtures', 'pab1-register-map.md'), 'utf8');
+const pab1Md = readText(path.join(__dirname, 'fixtures', 'pab1-register-map.md'));
 const pab1Rows = buildRegisterRows(pab1Md);
 eq(pab1Rows.length, 12, 'pab1: all 12 register rows found');
 assert.deepStrictEqual(
@@ -270,7 +272,7 @@ eq(rowSubRows(pab1Rows[8]).length, 0, 'pab1: uint register has no subtable');
 const pab1Ctx = buildMarkdownContext(pab1Md, 'pab1_fpga_types.md');
 pab1Ctx.params = { struct_name: 'pab1FpgaRegs' };
 const pab1Out = renderTemplate(body, pab1Ctx);
-const pab1Expected = fs.readFileSync(path.join(__dirname, 'fixtures', 'pab1-register-map.expected.yaml'), 'utf8');
+const pab1Expected = readText(path.join(__dirname, 'fixtures', 'pab1-register-map.expected.yaml'));
 eq(pab1Out, pab1Expected, 'pab1 rendered output matches expected YAML byte-for-byte');
 const p1 = pab1Out.split('\n');
 const p1line = (s) => p1.filter((l) => l === s);
@@ -328,12 +330,12 @@ const ALL_FORMATS = ['json', 'toml', 'xml', 'csv', 'tsv', 'ini', 'env', 'propert
 const pctx = Object.assign({}, demoCtx);
 const rendered = {};
 for (const fmt of ALL_FORMATS) {
-	const raw = fs.readFileSync(path.join(__dirname, '..', 'templates', `register-map-to-${fmt}.j2`), 'utf8');
+	const raw = readText(path.join(__dirname, '..', 'templates', `register-map-to-${fmt}.j2`));
 	const split = splitTemplateFile(raw);
 	const ctx = Object.assign({}, pctx, { params: split.params });
 	const out = renderTemplate(split.body, ctx);
 	rendered[fmt] = out;
-	const expected = fs.readFileSync(path.join(__dirname, 'fixtures', `register-map-demo.${fmt}.expected`), 'utf8');
+	const expected = readText(path.join(__dirname, 'fixtures', `register-map-demo.${fmt}.expected`));
 	eq(out, expected, `${fmt}: demo output matches expected byte-for-byte`);
 }
 // JSON: valid JSON, marker keys present, sizes correct.
@@ -396,7 +398,7 @@ assert(rendered.html.includes('<h2>controlWord'), 'html: register heading');
 // pab1 document through every format: key lines present.
 const pab1CtxAll = buildMarkdownContext(pab1Md, 'pab1_fpga_types.md');
 for (const fmt of ALL_FORMATS) {
-	const raw = fs.readFileSync(path.join(__dirname, '..', 'templates', `register-map-to-${fmt}.j2`), 'utf8');
+	const raw = readText(path.join(__dirname, '..', 'templates', `register-map-to-${fmt}.j2`));
 	const split = splitTemplateFile(raw);
 	const ctx = Object.assign({}, pab1CtxAll, { params: Object.assign({}, split.params, { struct_name: 'pab1FpgaRegs' }) });
 	const out = renderTemplate(split.body, ctx);
@@ -441,7 +443,7 @@ for (const fmt of ALL_FORMATS) {
 // Backward templates: YAML/JSON -> Markdown, and round-trip stability
 // --------------------------------------------------------------------------- //
 function renderTpl(file, md, source, extraParams) {
-	const raw = fs.readFileSync(path.join(__dirname, '..', 'templates', file), 'utf8');
+	const raw = readText(path.join(__dirname, '..', 'templates', file));
 	const split = splitTemplateFile(raw);
 	const ctx = buildMarkdownContext(md, source);
 	ctx.params = Object.assign({}, split.params, extraParams || {});

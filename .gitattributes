@@ -1,0 +1,4 @@
+# Templates and their expected outputs are compared byte-for-byte in tests:
+# keep them LF on every platform, whatever core.autocrlf says.
+templates/** text eol=lf
+tests/fixtures/** text eol=lf
