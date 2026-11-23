@@ -12,7 +12,7 @@ const disk={
  '/ws/lib/sub/.git':'gitdir: ../../.git/modules/sub\n',
  '/ws/.git/modules/sub/HEAD':'0123456789abcdef0123456789abcdef01234567\n',
  '/ws/lib/sub/x.py':'import os\n'};
-const U=p=>({path:p,fsPath:p,scheme:'file',authority:'',toString:()=> 'file://'+p});
+const U=p=>({path:p,fsPath:p.replace(/^\/([a-zA-Z]:)/,'$1'),scheme:'file',authority:'',toString:()=> 'file://'+p});
 const join=(u,...s)=>{const o=[];for(const x of (u.path+'/'+s.join('/')).split('/')){if(!x||x==='.')continue;if(x==='..')o.pop();else o.push(x)}return U('/'+o.join('/'))};
 const disposable=()=>({dispose(){}});
 const settings={'markdownEditor.codebaseMap':{maxFileBytes:1500,exclude:['**/gen']},files:{exclude:{'**/README.md':true,'**/off':false}}};
@@ -47,7 +47,7 @@ const wait=ms=>new Promise(r=>setTimeout(r,ms));
  assert(g.includes('**/node_modules/**')&&g.includes('**/tmp')&&g.includes('**/tmp/**')&&g.includes('**/gen/**'));assert(!g.includes('keep')&&!g.includes('bad'));
  assert.deepStrictEqual(uniqueRoots([{uri:U('/a/app'),name:'app'},{uri:U('/b/app'),name:'app'},{uri:U('/c'),name:'a/b'}]).map(r=>r.name),['app','app (2)','a-b']);
 
- const ctx={extensionUri:U(path.resolve(__dirname,'..')),workspaceState:{get:(k,d)=>state.has(k)?state.get(k):d,update:async(k,v)=>state.set(k,v)}};
+ const ctx={extensionUri:U(path.resolve(__dirname,'..').replace(/\\/g,'/').replace(/^([a-zA-Z]:)/,'/$1')),workspaceState:{get:(k,d)=>state.has(k)?state.get(k):d,update:async(k,v)=>state.set(k,v)}};
  const map=new CodebaseMap(ctx);
  await commands.get('markdownEditor.codebaseMap.open')();
  assert(panel.webview.html.includes("script-src 'nonce-"),'CSP with nonce');assert(!/https?:\/\/fonts|cdnjs/.test(panel.webview.html),'no remote resources');
