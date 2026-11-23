@@ -1,0 +1,20 @@
+/* Screenshots: a quiet frame so they read as UI captures, not page art. */
+.md-typeset img.screenshot {
+	border: 1px solid var(--md-default-fg-color--lightest);
+	border-radius: 6px;
+	box-shadow: 0 2px 10px rgb(0 0 0 / 12%);
+}
+.md-typeset figure figcaption {
+	font-size: 0.72rem;
+	color: var(--md-default-fg-color--light);
+}
+/* Show only the screenshot that matches the reader's colour scheme. */
+[data-md-color-scheme="default"] img[src$="-dark.png"],
+[data-md-color-scheme="default"] img[src$="-dark.svg"],
+[data-md-color-scheme="slate"] img[src$="-light.png"],
+[data-md-color-scheme="slate"] img[src$="-light.svg"] {
+	display: none;
+}
+.md-typeset .mermaid {
+	text-align: center;
+}

@@ -34,7 +34,7 @@ The method `getHtmlForWebview` defines what this webview looks like, in our case
 
 Messages, webview → extension: `ready`, `refresh`, `scan`, `pickFolder`, `open {path}`, `reveal {path}`, `store {key, value}`. Extension → webview: `begin {scan, name, store, maxFiles}`, `files {scan, files}`, `end {scan, cut}`, `status {text, sticky}`, `stale`. Each scan has an id and the webview ignores batches from an older scan. Paths are relative to the mapped root (prefixed with the root name in multi-root workspaces); `CodebaseMap.resolve` maps them back and refuses anything outside the roots.
 
-The file extensions in `MAP_EXTENSIONS` must match `LANG` in `media/codebaseMap.js`; `tests/codebaseMap.test.js` checks this. A panel serializer restores the map after a window reload. User guide: `docs/CODEBASE-MAP.md`.
+The file extensions in `MAP_EXTENSIONS` must match `LANG` in `media/codebaseMap.js`; `tests/codebaseMap.test.js` checks this. A panel serializer restores the map after a window reload. User guide: `docs/tutorials/codebase-map.md`; internals: `docs/theory/codebase-map.md`.
 
 # TODO
 

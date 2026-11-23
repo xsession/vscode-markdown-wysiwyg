@@ -1,0 +1,51 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 720 348" width="720" height="348" role="img" aria-labelledby="t d" font-family="system-ui, -apple-system, 'Segoe UI', sans-serif">
+<title id="t">Piper synthesis time per bundled voice</title>
+<desc id="d">First segment including model load, and a following segment, in milliseconds. LJSpeech (en): 2282 ms first, 612 ms next; John (en): 2407 ms first, 765 ms next; Kristin (en): 2269 ms first, 622 ms next; Anna (hu): 1451 ms first, 466 ms next; Berta (hu): 1170 ms first, 522 ms next; Imre (hu): 1247 ms first, 526 ms next.</desc>
+<rect width="720" height="348" rx="8" fill="#1a1a19"/>
+<text x="20" y="28" font-size="15" font-weight="600" fill="#f0efec">Synthesis time per bundled voice (ms)</text>
+<rect x="20" y="40" width="12" height="12" rx="3" fill="#3987e5"/><text x="38" y="50" font-size="12" fill="#c3c2b7">First segment (includes loading the voice)</text>
+<rect x="310" y="40" width="12" height="12" rx="3" fill="#d95926"/><text x="328" y="50" font-size="12" fill="#c3c2b7">Next segment (engine already running)</text>
+<line x1="120" y1="58" x2="120" y2="304" stroke="#383835" stroke-width="1"/>
+<text x="120" y="322" font-size="11" fill="#898781" text-anchor="middle">0</text>
+<line x1="228" y1="58" x2="228" y2="304" stroke="#2c2c2a" stroke-width="1"/>
+<text x="228" y="322" font-size="11" fill="#898781" text-anchor="middle">500</text>
+<line x1="336" y1="58" x2="336" y2="304" stroke="#2c2c2a" stroke-width="1"/>
+<text x="336" y="322" font-size="11" fill="#898781" text-anchor="middle">1000</text>
+<line x1="444" y1="58" x2="444" y2="304" stroke="#2c2c2a" stroke-width="1"/>
+<text x="444" y="322" font-size="11" fill="#898781" text-anchor="middle">1500</text>
+<line x1="552" y1="58" x2="552" y2="304" stroke="#2c2c2a" stroke-width="1"/>
+<text x="552" y="322" font-size="11" fill="#898781" text-anchor="middle">2000</text>
+<line x1="660" y1="58" x2="660" y2="304" stroke="#2c2c2a" stroke-width="1"/>
+<text x="660" y="322" font-size="11" fill="#898781" text-anchor="middle">2500</text>
+<text x="110" y="87" font-size="12" fill="#f0efec" text-anchor="end">LJSpeech (en)</text>
+<path d="M120 71h488.91200000000003a4 4 0 0 1 4 4v4a4 4 0 0 1 -4 4h-488.91200000000003z" fill="#3987e5"><title>LJSpeech (en), first segment: 2282 ms</title></path>
+<text x="618.912" y="81" font-size="11" fill="#c3c2b7">2282</text>
+<path d="M120 85h128.192a4 4 0 0 1 4 4v4a4 4 0 0 1 -4 4h-128.192z" fill="#d95926"><title>LJSpeech (en), next segment: 612 ms</title></path>
+<text x="258.192" y="95" font-size="11" fill="#c3c2b7">612</text>
+<text x="110" y="127" font-size="12" fill="#f0efec" text-anchor="end">John (en)</text>
+<path d="M120 111h515.912a4 4 0 0 1 4 4v4a4 4 0 0 1 -4 4h-515.912z" fill="#3987e5"><title>John (en), first segment: 2407 ms</title></path>
+<text x="645.912" y="121" font-size="11" fill="#c3c2b7">2407</text>
+<path d="M120 125h161.24a4 4 0 0 1 4 4v4a4 4 0 0 1 -4 4h-161.24z" fill="#d95926"><title>John (en), next segment: 765 ms</title></path>
+<text x="291.24" y="135" font-size="11" fill="#c3c2b7">765</text>
+<text x="110" y="167" font-size="12" fill="#f0efec" text-anchor="end">Kristin (en)</text>
+<path d="M120 151h486.10400000000004a4 4 0 0 1 4 4v4a4 4 0 0 1 -4 4h-486.10400000000004z" fill="#3987e5"><title>Kristin (en), first segment: 2269 ms</title></path>
+<text x="616.104" y="161" font-size="11" fill="#c3c2b7">2269</text>
+<path d="M120 165h130.352a4 4 0 0 1 4 4v4a4 4 0 0 1 -4 4h-130.352z" fill="#d95926"><title>Kristin (en), next segment: 622 ms</title></path>
+<text x="260.352" y="175" font-size="11" fill="#c3c2b7">622</text>
+<text x="110" y="207" font-size="12" fill="#f0efec" text-anchor="end">Anna (hu)</text>
+<path d="M120 191h309.416a4 4 0 0 1 4 4v4a4 4 0 0 1 -4 4h-309.416z" fill="#3987e5"><title>Anna (hu), first segment: 1451 ms</title></path>
+<text x="439.416" y="201" font-size="11" fill="#c3c2b7">1451</text>
+<path d="M120 205h96.656a4 4 0 0 1 4 4v4a4 4 0 0 1 -4 4h-96.656z" fill="#d95926"><title>Anna (hu), next segment: 466 ms</title></path>
+<text x="226.656" y="215" font-size="11" fill="#c3c2b7">466</text>
+<text x="110" y="247" font-size="12" fill="#f0efec" text-anchor="end">Berta (hu)</text>
+<path d="M120 231h248.72000000000003a4 4 0 0 1 4 4v4a4 4 0 0 1 -4 4h-248.72000000000003z" fill="#3987e5"><title>Berta (hu), first segment: 1170 ms</title></path>
+<text x="378.72" y="241" font-size="11" fill="#c3c2b7">1170</text>
+<path d="M120 245h108.75200000000001a4 4 0 0 1 4 4v4a4 4 0 0 1 -4 4h-108.75200000000001z" fill="#d95926"><title>Berta (hu), next segment: 522 ms</title></path>
+<text x="238.752" y="255" font-size="11" fill="#c3c2b7">522</text>
+<text x="110" y="287" font-size="12" fill="#f0efec" text-anchor="end">Imre (hu)</text>
+<path d="M120 271h265.35200000000003a4 4 0 0 1 4 4v4a4 4 0 0 1 -4 4h-265.35200000000003z" fill="#3987e5"><title>Imre (hu), first segment: 1247 ms</title></path>
+<text x="395.35200000000003" y="281" font-size="11" fill="#c3c2b7">1247</text>
+<path d="M120 285h109.61599999999999a4 4 0 0 1 4 4v4a4 4 0 0 1 -4 4h-109.61599999999999z" fill="#d95926"><title>Imre (hu), next segment: 526 ms</title></path>
+<text x="239.61599999999999" y="295" font-size="11" fill="#c3c2b7">526</text>
+<text x="700" y="340" font-size="10" fill="#898781" text-anchor="end">Linux x64, bundled native Piper, short passages; single measurements</text>
+</svg>

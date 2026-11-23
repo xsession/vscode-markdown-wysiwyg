@@ -1,0 +1,118 @@
+site_name: Markdown Editor and Listening Workspace
+site_description: >-
+  A VS Code extension for editing Markdown in a WYSIWYG editor, listening to long
+  technical documents offline, exploring documentation and source code as maps,
+  and converting Markdown with templates.
+docs_dir: docs
+site_dir: site
+strict: true
+
+theme:
+  name: material
+  language: en
+  features:
+    - navigation.tabs
+    - navigation.sections
+    - navigation.indexes
+    - navigation.top
+    - navigation.footer
+    - search.suggest
+    - search.highlight
+    - content.code.copy
+    - content.tabs.link
+    - toc.follow
+  palette:
+    - media: "(prefers-color-scheme: light)"
+      scheme: default
+      primary: indigo
+      accent: teal
+      toggle:
+        icon: material/weather-night
+        name: Switch to dark mode
+    - media: "(prefers-color-scheme: dark)"
+      scheme: slate
+      primary: indigo
+      accent: teal
+      toggle:
+        icon: material/weather-sunny
+        name: Switch to light mode
+  icon:
+    logo: material/book-open-page-variant
+
+extra_css:
+  - assets/extra.css
+
+markdown_extensions:
+  - abbr
+  - admonition
+  - attr_list
+  - def_list
+  - footnotes
+  - md_in_html
+  - tables
+  - toc:
+      permalink: true
+  - pymdownx.details
+  - pymdownx.highlight:
+      anchor_linenums: true
+  - pymdownx.inlinehilite
+  - pymdownx.keys
+  - pymdownx.snippets
+  - pymdownx.tabbed:
+      alternate_style: true
+  - pymdownx.tasklist:
+      custom_checkbox: true
+  - pymdownx.emoji:
+      emoji_index: !!python/name:material.extensions.emoji.twemoji
+      emoji_generator: !!python/name:material.extensions.emoji.to_svg
+  - pymdownx.superfences:
+      custom_fences:
+        - name: mermaid
+          class: mermaid
+          format: !!python/name:pymdownx.superfences.fence_code_format
+
+nav:
+  - Home: index.md
+  - Getting started:
+      - getting-started/index.md
+      - Install: getting-started/install.md
+      - A first tour: getting-started/first-tour.md
+  - Tutorials:
+      - tutorials/index.md
+      - Edit Markdown visually: tutorials/edit-markdown.md
+      - Listen to a document: tutorials/listen-to-a-document.md
+      - Study a long document by ear: tutorials/study-long-documents.md
+      - Explore project documentation: tutorials/explore-documentation.md
+      - Learn a codebase with the map: tutorials/codebase-map.md
+      - Convert Markdown with Jinja templates: tutorials/jinja-templates.md
+      - Keep a table in sync with a config file: tutorials/table-sync.md
+  - Theory of operation:
+      - theory/index.md
+      - Architecture: theory/architecture.md
+      - WYSIWYG editor: theory/wysiwyg-editor.md
+      - Speech pipeline: theory/speech-pipeline.md
+      - Document import: theory/document-import.md
+      - Documentation index and mind map: theory/documentation-index.md
+      - Listening workspace: theory/listening-workspace.md
+      - Codebase map: theory/codebase-map.md
+      - Templates and synchronization: theory/templates.md
+      - Security and privacy: theory/security-privacy.md
+  - Reference:
+      - reference/index.md
+      - Commands: reference/commands.md
+      - Settings: reference/settings.md
+      - Keyboard shortcuts: reference/keyboard.md
+      - Document formats: reference/document-formats.md
+      - Jinja templates: reference/jinja.md
+      - Table mappings: reference/table-mapping.md
+  - Development:
+      - development/index.md
+      - Build from source: development/build.md
+      - Tests and validation: development/testing.md
+      - Validation record 0.10: validation/piper-0.10.md
+      - Validation record 0.9: validation/piper-0.9.md
+      - Third-party components: development/third-party.md
+      - Writing these docs: development/docs.md
+  - Background:
+      - Listening research: research/listening-large-documents.md
+      - Release history: changelog.md

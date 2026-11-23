@@ -1,54 +1,15 @@
-# Jinja conversion templates
+# Jinja templates
 
-The toolbar's **Template** button opens the native file browser and picks a
-Jinja conversion template (`.j2`, `.jinja`, `.jnt`). The template describes
-how the opened Markdown document converts into the selected output format; a
-TypeScript backend inside the extension (no Python, no external runtime)
-renders it when you press **Generate**. The same picker also accepts legacy
-`.table-template.json` mappings. The Format menu lets you override the output
-format or return to **Template default**.
-
-```
-Template button ──file browser──▶ template.j2 (front matter + Jinja body)
-Generate button ──▶ TypeScript renderer (src/jinjaTemplate.ts)
-                  context = parsed Markdown (tables, rows, helpers)
-                  output  ──▶ <output folder>/<name>.<ext>
-```
-
-## Create a template from examples
-
-Click **Create Jinja template from examples** in the editor toolbar or run
-**Markdown Editor: Create Jinja Template from Examples** in the Command
-Palette. Select the source example, select the expected output example, then
-choose where to save the `.j2` template. The extension renders the inferred
-template with your source and checks that it reproduces the expected text
-before opening the save dialog.
-
-The generator matches source values to the expected text. It recognizes
-Markdown headings and table cells, plus fields in JSON and YAML inputs. Two
-or more matching records can produce a row loop. Use different values across
-rows to distinguish columns, and check the result with a second example
-before relying on it for a different document. Content with no identifiable
-source match stays literal. Add calculated transformations or reverse sync
-rules by editing the generated template.
-
-Once saved, choose **Run Template** in the notification to run it against
-the selected source and choose an output file. You can also run
-**Markdown Editor: Run Jinja Template** from the Command Palette and choose
-any supported text source and an existing `.j2` file. JSON and YAML sources
-can stay open in the standard VS Code editor.
-
-If you create the template from the Markdown file open in the WYSIWYG
-toolbar, it becomes the current template there. **Generate** then uses the
-toolbar's output folder. The example filename supplies the default name,
-including an extension such as `.yaml`. Example-derived JSON and YAML
-output is revalidated on each run before writing.
+Reference for conversion templates (`.j2`, `.jinja`, `.jnt`). For a guided
+introduction see [Convert Markdown with Jinja templates](../tutorials/jinja-templates.md);
+for how rendering and synchronization work see
+[Templates and synchronization](../theory/templates.md).
 
 ## Template file format
 
 An optional YAML front matter, then the Jinja body:
 
-```
+```yaml
 ---
 name: Register map to YAML
 format: yaml
@@ -67,6 +28,9 @@ struct_name: demoFpgaRegs
   file extension.
 - `output` — output file basename (extension from the format). Without it the
   opened document's basename is used.
+- `reverse` — optional. `register-map` uses the built-in register-map
+  importer; a relative path names a reverse template (see
+  [Reverse templates](#reverse-templates)).
 - every other key is available in the body as `params.<key>`.
 
 Output is written to `markdownEditor.outputFolder` (set with the toolbar's
@@ -156,7 +120,23 @@ Functions (all contexts): `len(x)`, `min(x)`, `max(x)`, `abs(x)`, `range(n)`.
 - Undefined names render empty and index/member access on missing values
   returns `null` (Jinja leniency); unknown filters/tags raise a clear error.
 
-## Built-in templates (`templates/`)
+## Reverse templates
+
+A forward template can opt into reverse synchronization with
+`reverse: relative/path.j2` in its front matter. When the generated output is
+saved, the reverse template is rendered with:
+
+| Value | Meaning |
+| --- | --- |
+| `markdown` | the edited output text (its tables are parsed as usual) |
+| `original_markdown` | the Markdown source before the edit |
+| `previous_output` | the output as it was last synchronized |
+| `params` | the reverse template's front matter |
+
+Its result replaces the whole Markdown source, so it must reproduce any
+content that should be kept. An empty result is rejected.
+
+## Built-in templates
 
 All forward templates accept both register-map styles (single table with
 nested Description cells, or one-line rows + prose + nested tables), take
@@ -196,60 +176,3 @@ demo register map (`tests/fixtures/register-map-demo.md`) byte-for-byte to
 document (`tests/fixtures/pab1-register-map.md`) with per-format content
 checks, and the round trip **md → yaml → md → yaml is byte-identical** for
 both the demo and the pab1 document.
-
-## Backward conversion (YAML/JSON → Markdown)
-
-Open a `*_fpga_types.yam(l)` or `*_fpga_types.json` file in the editor, pick
-`yaml-to-register-map.j2` (or the JSON twin) with the Template button, choose
-the **Markdown** format and press Generate — the register-map Markdown
-document comes back in the output folder. The backward templates read the
-pre-parsed `types` context value (the engine detects YAML or JSON
-automatically), so the body iterates `for name, t in types | items`. A
-document without a `types` section renders an explanatory error line.
-
-## Live input → output link
-
-After a Jinja Generate, the output file opens beside the editor and the two
-documents stay linked for that editor session:
-
-1. the templates emit one `@register <name>` marker per section (comment
-   lines; a JSON key for JSON; the register's table row for Markdown output);
-2. when you edit a section in the open document, the extension re-renders the
-   template against the current text (400 ms debounce) and rewrites the
-   output file;
-3. it then detects which section changed (per-register content fingerprints),
-   finds that section's line span in the output via the markers, and **scrolls
-   the output editor to the section and selects it** — you see the effect of
-   your edit exactly where it landed.
-
-Saving YAML or JSON generated with the bundled register-map templates sends
-supported edits back to the original Markdown. It updates existing register
-cells and field/enum tables while keeping the register offsets and surrounding
-document. Add, remove, or rename registers in Markdown, where their offsets
-are defined. Output-only metadata such as code generation settings has no
-Markdown counterpart.
-
-The link survives closing the Markdown tab for the current VS Code window.
-If both sides changed, the extension keeps both files and reports the conflict.
-An invalid output is left in place for correction. Generate again to establish
-a link after restarting VS Code. Generate is an explicit Markdown-to-output
-operation and can replace the destination.
-
-Custom templates can opt into reverse sync with `reverse: relative/path.j2`
-in the forward template's front matter. That template receives the edited
-output as `markdown`, the original source as `original_markdown`, and the
-last synchronized output as `previous_output`. Its result replaces the source
-Markdown, so it should include any source content that must be preserved.
-
-## Writing a new template
-
-Copy `templates/register-map-to-yaml.j2`, change the front matter and body,
-save anywhere, pick it with the Template button, choose the output format and
-press Generate. The Format dropdown only decides the output extension — the
-template body decides the content, so any text format can be a target.
-
-## Legacy mapping templates
-
-`.table-template.json` files (see TEMPLATE-SYNC.md) still work: when a
-generate request names one, the structured column-mapping generator in
-`codeGenerator.ts` runs instead of the Jinja renderer.

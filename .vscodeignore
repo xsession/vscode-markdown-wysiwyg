@@ -12,10 +12,8 @@
 
 
 
-!docs/DOCUMENT-FORMATS.md
 
 
-!docs/LISTENING-WORKSPACE.md
 !THIRD_PARTY_AI.md
 
 
@@ -24,13 +22,10 @@
 
 !schemas/**/*
 !examples/table-sync/**/*
-!TEMPLATE-SYNC.md
 !templates/**/*
-!JINJA-TEMPLATES.md
 
 
 
-!DOCX-TEMPLATES.md
 
 
 
