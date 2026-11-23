@@ -62,4 +62,4 @@ if __name__ == '__main__':
     parser.add_argument('--voice', required=True)
     parser.add_argument('--destination', required=True)
     args = parser.parse_args()
-    download_voice(json.loads(Path(args.catalog).read_text()), args.voice, args.destination)
+    download_voice(json.loads(Path(args.catalog).read_text(encoding='utf-8')), args.voice, args.destination)

@@ -25,12 +25,13 @@ ARCHIVES = {
 }
 PHONEMIZE = 'fccd4f335aa68ac0b72600822f34d84363daa2bf'
 ESPEAK = '0f65aa301e0d6bae5e172cc74197d32a6182200f'
+# The onnxruntime GitHub repository is gone; its license texts ship inside the official NuGet package.
+ONNXRUNTIME_NUPKG = ('https://www.nuget.org/api/v2/package/Microsoft.ML.OnnxRuntime/1.14.1',
+                    '3a277421efce94b5f91f4a5dc8efc1add99b4c01f547279d81098ffb4fafbb6d')
 LICENSES = {
  'piper-MIT.txt': 'https://raw.githubusercontent.com/rhasspy/piper/' + RELEASE + '/LICENSE.md',
  'piper-phonemize-MIT.txt': 'https://raw.githubusercontent.com/rhasspy/piper-phonemize/' + PHONEMIZE + '/LICENSE.md',
  'uni-algo-MIT.txt': 'https://raw.githubusercontent.com/rhasspy/piper-phonemize/' + PHONEMIZE + '/licenses/uni-algo/LICENSE.md',
- 'onnxruntime-MIT.txt': 'https://raw.githubusercontent.com/microsoft/onnxruntime/v1.14.1/LICENSE',
- 'onnxruntime-ThirdPartyNotices.txt': 'https://raw.githubusercontent.com/microsoft/onnxruntime/v1.14.1/ThirdPartyNotices.txt',
  'espeak-ng-GPL3.txt': 'https://raw.githubusercontent.com/rhasspy/espeak-ng/' + ESPEAK + '/COPYING',
  'fmt-MIT.txt': 'https://raw.githubusercontent.com/fmtlib/fmt/10.0.0/LICENSE.rst',
  'spdlog-MIT.txt': 'https://raw.githubusercontent.com/gabime/spdlog/v1.12.0/LICENSE',
@@ -99,6 +100,12 @@ def main():
                 future.result()
         unpack_zip(work / 'piper_windows_amd64.zip', RUNTIME / 'win32-x64')
         unpack_tar_portable(work / 'piper_linux_x86_64.tar.gz', RUNTIME / 'linux-x64')
+        fetch(ONNXRUNTIME_NUPKG[0], work / 'onnxruntime.nupkg', ONNXRUNTIME_NUPKG[1])
+        with zipfile.ZipFile(work / 'onnxruntime.nupkg') as package:
+            licenses = RUNTIME / 'licenses'
+            licenses.mkdir(parents=True, exist_ok=True)
+            (licenses / 'onnxruntime-MIT.txt').write_bytes(package.read('LICENSE.txt'))
+            (licenses / 'onnxruntime-ThirdPartyNotices.txt').write_bytes(package.read('ThirdPartyNotices.txt'))
         if os.name == 'nt':
             sevenzip = Path(sevenzip_windows)
         else:
@@ -142,7 +149,7 @@ def main():
     files = {file.relative_to(RUNTIME).as_posix(): hashlib.sha256(file.read_bytes()).hexdigest()
              for file in sorted(RUNTIME.rglob('*')) if file.is_file() and file.name != 'manifest.json'}
     manifest = {'release': RELEASE, 'platforms': ['win32-x64', 'linux-x64'], 'files': files}
-    (RUNTIME / 'manifest.json').write_text(json.dumps(manifest, indent=2) + '\n')
+    (RUNTIME / 'manifest.json').write_text(json.dumps(manifest, indent=2) + '\n', encoding='utf-8')
     print('Offline runtime bundle ready: ' + str(len(files)) + ' files')
 
 if __name__ == '__main__':

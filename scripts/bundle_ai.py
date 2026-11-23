@@ -27,7 +27,7 @@ def main():
     if not sources.is_file():
         print('Local AI sources not present (selfserve AI removed) — nothing to bundle.')
         return
-    config=json.loads(sources.read_text())
+    config=json.loads(sources.read_text(encoding='utf-8'))
     AI.mkdir(parents=True,exist_ok=True)
     with tempfile.TemporaryDirectory(prefix='bundle-local-ai-') as tmp:
         work=Path(tmp)
@@ -59,6 +59,6 @@ def main():
         if partial.is_file() and '.partial' in partial.name:partial.unlink(missing_ok=True)
     files={p.relative_to(AI).as_posix():digest(p) for p in sorted(AI.rglob('*')) if p.is_file() and p.name!='manifest.json' and '.partial' not in p.name}
     manifest={**config,'runtimes':runtimes,'files':files};manifest['model']['file']='model.gguf'
-    (AI/'manifest.json').write_text(json.dumps(manifest,indent=2)+'\n')
+    (AI/'manifest.json').write_text(json.dumps(manifest,indent=2)+'\n',encoding='utf-8')
     print('Offline local AI bundle ready: '+str(len(files))+' files',flush=True)
 if __name__=='__main__':main()

@@ -10,7 +10,7 @@ BUNDLED = ['en_US-ljspeech-medium', 'en_US-john-medium', 'en_US-kristin-medium',
            'hu_HU-anna-medium', 'hu_HU-berta-medium', 'hu_HU-imre-medium']
 
 def main():
-    catalog = json.loads((ROOT / 'resources/voice-catalog.json').read_text())
+    catalog = json.loads((ROOT / 'resources/voice-catalog.json').read_text(encoding='utf-8'))
     def fetch(key):
         for attempt in range(3):
             try:
@@ -23,7 +23,7 @@ def main():
                 time.sleep(1)
     with concurrent.futures.ThreadPoolExecutor(max_workers=6) as pool:
         list(pool.map(fetch, BUNDLED))
-    (ROOT / 'resources/bundled-voices.json').write_text(json.dumps(BUNDLED, indent=2) + '\n')
+    (ROOT / 'resources/bundled-voices.json').write_text(json.dumps(BUNDLED, indent=2) + '\n', encoding='utf-8')
 
 if __name__ == '__main__':
     main()
