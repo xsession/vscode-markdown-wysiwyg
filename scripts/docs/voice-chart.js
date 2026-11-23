@@ -1,12 +1,12 @@
-// Draws docs/assets/images/voice-latency-{light,dark}.svg from the measured
-// synthesis times in docs/validation/native-voices-0.10.json.
+// Draws docs/assets/images/voice_latency_{light,dark}.svg from the measured
+// synthesis times in docs/development/validation/native_voices_0_10.json.
 // Usage: node scripts/docs/voice-chart.js
 'use strict';
 const fs = require('fs');
 const path = require('path');
 
 const root = path.resolve(__dirname, '..', '..');
-const data = JSON.parse(fs.readFileSync(path.join(root, 'docs/validation/native-voices-0.10.json'), 'utf8'));
+const data = JSON.parse(fs.readFileSync(path.join(root, 'docs/development/validation/native_voices_0_10.json'), 'utf8'));
 
 const themes = {
 	light: { surface: '#fcfcfb', ink: '#0b0b0b', soft: '#52514e', muted: '#898781', grid: '#e1e0d9', axis: '#c3c2b7', first: '#2a78d6', warm: '#eb6834' },
@@ -59,7 +59,7 @@ function chart(t) {
 }
 
 for (const [mode, t] of Object.entries(themes)) {
-	const file = path.join(root, 'docs/assets/images', `voice-latency-${mode}.svg`);
+	const file = path.join(root, 'docs/assets/images', `voice_latency_${mode}.svg`);
 	fs.writeFileSync(file, chart(t));
 	console.log('wrote', path.relative(root, file));
 }

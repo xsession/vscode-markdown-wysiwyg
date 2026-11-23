@@ -3,10 +3,9 @@
 !LICENSE.txt
 !ckeditor5-build-markdown/build/**/*
 !**/src/markdownEditorInitScript.js
-!docs/research/listening-large-documents.md
-!THIRD_PARTY_VOICES.md
+!docs/about/listening_research.md
+!docs/about/third_party/**/*
 
-!THIRD_PARTY_RUNTIME.md
 
 !media/**/*
 
@@ -14,7 +13,6 @@
 
 
 
-!THIRD_PARTY_AI.md
 
 
 

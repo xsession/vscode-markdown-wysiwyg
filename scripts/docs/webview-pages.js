@@ -97,7 +97,7 @@ for (const mode of ['light', 'dark']) {
 	const { documentationTree } = require(path.join(root, 'out/documentationIndex'));
 	const docs = path.join(root, 'docs');
 	const files = [];
-	for (const dir of ['getting-started', 'tutorials', 'theory']) {
+	for (const dir of ['getting_started', 'tutorials', 'theory_of_operation']) {
 		for (const name of fs.readdirSync(path.join(docs, dir)).filter((n) => n.endsWith('.md')).sort()) {
 			const full = path.join(docs, dir, name);
 			files.push({ path: 'docs/' + dir + '/' + name, uri: fileUrl(full), text: fs.readFileSync(full, 'utf8') });
@@ -106,8 +106,8 @@ for (const mode of ['light', 'dark']) {
 	const tree = documentationTree(files);
 	// Progress badges as the listening workspace would report them.
 	const mark = (node) => {
-		if (node.kind === 'file' && /listen-to-a-document|first-tour/.test(node.uri)) Object.assign(node, { progress: node.uri.includes('first-tour') ? 100 : 45, completed: node.uri.includes('first-tour'), bookmarks: 2 });
-		if (node.kind === 'file' && /speech-pipeline/.test(node.uri)) Object.assign(node, { current: true, progress: 20 });
+		if (node.kind === 'file' && /listen_to_a_document|first_tour/.test(node.uri)) Object.assign(node, { progress: node.uri.includes('first_tour') ? 100 : 45, completed: node.uri.includes('first_tour'), bookmarks: 2 });
+		if (node.kind === 'file' && /speech_pipeline/.test(node.uri)) Object.assign(node, { current: true, progress: 20 });
 		node.children.forEach(mark);
 	};
 	mark(tree);

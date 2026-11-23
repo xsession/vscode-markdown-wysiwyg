@@ -72,7 +72,7 @@ export function activate(context: vscode.ExtensionContext) {
 
 	context.subscriptions.push(vscode.commands.registerCommand('markdownEditor.listeningGuide', async () => {
 		try {
-			const uri = vscode.Uri.joinPath(context.extensionUri, 'docs', 'research', 'listening-large-documents.md');
+			const uri = vscode.Uri.joinPath(context.extensionUri, 'docs', 'about', 'listening_research.md');
 			const document = await vscode.workspace.openTextDocument(uri);
 			await reader.open(document.getText(), 'Listening research guide', uri.toString(), true);
 		} catch (error) { vscode.window.showErrorMessage(String(error)); }

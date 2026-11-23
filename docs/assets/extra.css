@@ -9,10 +9,10 @@
 	color: var(--md-default-fg-color--light);
 }
 /* Show only the screenshot that matches the reader's colour scheme. */
-[data-md-color-scheme="default"] img[src$="-dark.png"],
-[data-md-color-scheme="default"] img[src$="-dark.svg"],
-[data-md-color-scheme="slate"] img[src$="-light.png"],
-[data-md-color-scheme="slate"] img[src$="-light.svg"] {
+[data-md-color-scheme="default"] img[src$="_dark.png"],
+[data-md-color-scheme="default"] img[src$="_dark.svg"],
+[data-md-color-scheme="slate"] img[src$="_light.png"],
+[data-md-color-scheme="slate"] img[src$="_light.svg"] {
 	display: none;
 }
 .md-typeset .mermaid {

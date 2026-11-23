@@ -91,3 +91,16 @@ Extract an offline VSIX and copy its `extension/resources/runtime` and
 The local model bundle was removed from the build. `scripts/bundle_ai.py` and
 the asset verification skip it when `resources/ai-sources.json` is absent, so
 the package builds without it.
+
+## Publishing
+
+Increase `version` in `package.json` first, then build the package and
+publish it to the Visual Studio Marketplace and Open VSX:
+
+```sh
+npx @vscode/vsce publish
+npx ovsx publish -p "$OVSX_TOKEN"
+```
+
+To work on the CKEditor build on its own, run `npm start` in
+`ckeditor5-build-markdown/`.

@@ -74,45 +74,53 @@ markdown_extensions:
 nav:
   - Home: index.md
   - Getting started:
-      - getting-started/index.md
-      - Install: getting-started/install.md
-      - A first tour: getting-started/first-tour.md
+      - getting_started/index.md
+      - Install: getting_started/install.md
+      - A first tour: getting_started/first_tour.md
   - Tutorials:
       - tutorials/index.md
-      - Edit Markdown visually: tutorials/edit-markdown.md
-      - Listen to a document: tutorials/listen-to-a-document.md
-      - Study a long document by ear: tutorials/study-long-documents.md
-      - Explore project documentation: tutorials/explore-documentation.md
-      - Learn a codebase with the map: tutorials/codebase-map.md
-      - Convert Markdown with Jinja templates: tutorials/jinja-templates.md
-      - Keep a table in sync with a config file: tutorials/table-sync.md
+      - Edit Markdown visually: tutorials/edit_markdown.md
+      - Listen to a document: tutorials/listen_to_a_document.md
+      - Study a long document by ear: tutorials/study_long_documents.md
+      - Explore project documentation: tutorials/explore_documentation.md
+      - Learn a codebase with the map: tutorials/codebase_map.md
+      - Convert Markdown with Jinja templates: tutorials/jinja_templates.md
+      - Keep a table in sync with a config file: tutorials/table_sync.md
   - Theory of operation:
-      - theory/index.md
-      - Architecture: theory/architecture.md
-      - WYSIWYG editor: theory/wysiwyg-editor.md
-      - Speech pipeline: theory/speech-pipeline.md
-      - Document import: theory/document-import.md
-      - Documentation index and mind map: theory/documentation-index.md
-      - Listening workspace: theory/listening-workspace.md
-      - Codebase map: theory/codebase-map.md
-      - Templates and synchronization: theory/templates.md
-      - Security and privacy: theory/security-privacy.md
+      - theory_of_operation/index.md
+      - Architecture: theory_of_operation/architecture.md
+      - WYSIWYG editor: theory_of_operation/wysiwyg_editor.md
+      - Speech pipeline: theory_of_operation/speech_pipeline.md
+      - Document import: theory_of_operation/document_import.md
+      - Documentation index and mind map: theory_of_operation/documentation_index.md
+      - Listening workspace: theory_of_operation/listening_workspace.md
+      - Codebase map: theory_of_operation/codebase_map.md
+      - Templates and synchronization: theory_of_operation/templates.md
+      - Security and privacy: theory_of_operation/security_privacy.md
   - Reference:
       - reference/index.md
       - Commands: reference/commands.md
       - Settings: reference/settings.md
       - Keyboard shortcuts: reference/keyboard.md
-      - Document formats: reference/document-formats.md
+      - Document formats: reference/document_formats.md
       - Jinja templates: reference/jinja.md
-      - Table mappings: reference/table-mapping.md
+      - Table mappings: reference/table_mapping.md
   - Development:
       - development/index.md
       - Build from source: development/build.md
       - Tests and validation: development/testing.md
-      - Validation record 0.10: validation/piper-0.10.md
-      - Validation record 0.9: validation/piper-0.9.md
-      - Third-party components: development/third-party.md
-      - Writing these docs: development/docs.md
-  - Background:
-      - Listening research: research/listening-large-documents.md
-      - Release history: changelog.md
+      - Validation records:
+          - development/validation/index.md
+          - Piper 0.10: development/validation/piper_0_10.md
+          - Piper 0.9: development/validation/piper_0_9.md
+      - Writing these docs: development/writing_docs.md
+      - Roadmap: development/roadmap.md
+  - About:
+      - about/index.md
+      - Listening research: about/listening_research.md
+      - Release history: about/release_history.md
+      - Third-party components:
+          - about/third_party/index.md
+          - Speech runtime: about/third_party/speech_runtime.md
+          - Voices: about/third_party/voices.md
+          - Local AI: about/third_party/local_ai.md

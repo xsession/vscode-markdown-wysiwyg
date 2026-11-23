@@ -1,9 +1,9 @@
 # Jinja templates
 
 Reference for conversion templates (`.j2`, `.jinja`, `.jnt`). For a guided
-introduction see [Convert Markdown with Jinja templates](../tutorials/jinja-templates.md);
+introduction see [Convert Markdown with Jinja templates](../tutorials/jinja_templates.md);
 for how rendering and synchronization work see
-[Templates and synchronization](../theory/templates.md).
+[Templates and synchronization](../theory_of_operation/templates.md).
 
 ## Template file format
 

@@ -9,7 +9,7 @@ resources/voices/**/*.onnx
 **/__pycache__/
 *.partial
 
-# Local AI model weights — too large for git, see THIRD_PARTY_AI.md
+# Local AI model weights — too large for git, see docs/about/third_party/local_ai.md
 resources/ai/*.gguf
 
 resources/runtime/

@@ -35,14 +35,15 @@ parser check before bundling, so an incomplete package cannot be built.
 
 ## Validation records
 
-Results of hands-on validation are kept in `docs/validation/`:
+Results of hands-on validation are kept in
+[Validation records](validation/index.md):
 
-- [Piper 0.10 validation](../validation/piper-0.10.md) and
-  [0.9](../validation/piper-0.9.md)
-- `native-voices-0.10.json`: synthesis timing per voice (charted in
-  [Speech pipeline](../theory/speech-pipeline.md#4-piper))
-- `windows-imports-0.10.json`: DLL import closure of the Windows engine
-- `runtime-manifest-0.10.json`, `voice-synthesis-linux.json`
+- [Piper 0.10 validation](validation/piper_0_10.md) and
+  [0.9](validation/piper_0_9.md)
+- `native_voices_0_10.json`: synthesis timing per voice (charted in
+  [Speech pipeline](../theory_of_operation/speech_pipeline.md#4-piper))
+- `windows_imports_0_10.json`: DLL import closure of the Windows engine
+- `runtime_manifest_0_10.json`, `voice_synthesis_linux.json`
 
 ## Not yet verified
 

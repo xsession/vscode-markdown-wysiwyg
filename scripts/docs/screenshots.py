@@ -2,7 +2,7 @@
 
 Builds stand-alone webview pages with scripts/docs/webview-pages.js, opens each
 one in headless Chromium in the light and dark theme, puts it into a
-representative state and saves NAME-light.png and NAME-dark.png.
+representative state and saves NAME_light.png and NAME_dark.png.
 
 Requirements: `npm run test-compile`, `npm run build:editor` (for the editor
 screenshot), and Playwright for Python with Chromium:
@@ -146,7 +146,7 @@ def main():
                     page.on("pageerror", lambda e, errors=errors: errors.append(str(e)))
                     page.goto(source.as_uri())
                     prepare(page, name)
-                    target = IMAGES / f"{name}-{mode}.png"
+                    target = IMAGES / f"{name.replace('-', '_')}_{mode}.png"
                     page.screenshot(path=str(target))
                     page.close()
                     print(f"wrote {target.relative_to(ROOT)}" + (f"  (page errors: {errors})" if errors else ""))

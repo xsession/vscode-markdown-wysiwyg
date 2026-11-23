@@ -21,7 +21,7 @@ speech is sent to a service.
 - **Table synchronization**: bind a Markdown table to a configuration file in
   one of eleven formats.
 
-![The codebase map](docs/assets/images/codebase-map-light.png)
+![The codebase map](docs/assets/images/codebase_map_light.png)
 
 ## Documentation
 
@@ -30,19 +30,19 @@ site (`mkdocs serve`):
 
 | | |
 | --- | --- |
-| [Getting started](docs/getting-started/index.md) | [Install](docs/getting-started/install.md) the extension and take [a first tour](docs/getting-started/first-tour.md) |
+| [Getting started](docs/getting_started/index.md) | [Install](docs/getting_started/install.md) the extension and take [a first tour](docs/getting_started/first_tour.md) |
 | [Tutorials](docs/tutorials/index.md) | step-by-step tasks for every feature |
-| [Theory of operation](docs/theory/index.md) | how each feature works inside, with diagrams |
+| [Theory of operation](docs/theory_of_operation/index.md) | how each feature works inside, with diagrams |
 | [Reference](docs/reference/index.md) | commands, settings, shortcuts, formats, template and mapping syntax |
-| [Development](docs/development/index.md) | building, testing and third-party components |
-| [Release history](docs/changelog.md) | what changed in each version |
+| [Development](docs/development/index.md) | building, testing, validation records and the roadmap |
+| [About](docs/about/index.md) | listening research, [release history](docs/about/release_history.md) and third-party licenses |
 
 ## Install
 
 Install the full offline VSIX with **Extensions → … → Install from VSIX…** and
 reload the window. It requires VS Code 1.105 or newer. Speech works out of
 the box on Windows x64 and Linux x64, with no Python and no network. See
-[Install](docs/getting-started/install.md) for details and upgrade notes.
+[Install](docs/getting_started/install.md) for details and upgrade notes.
 
 ## Build from source
 
@@ -60,5 +60,4 @@ Windows, `build.bat` prepares them and builds the offline package. See
 
 The extension is licensed under the GPL (`LICENSE.txt`). Bundled runtimes and
 voices keep their own licenses: see
-[Third-party components](docs/development/third-party.md),
-`THIRD_PARTY_RUNTIME.md` and `THIRD_PARTY_VOICES.md`.
+[Third-party components](docs/about/third_party/index.md).

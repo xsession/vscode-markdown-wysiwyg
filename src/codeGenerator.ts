@@ -1,6 +1,6 @@
 // Table-sync code generation: reads a marked Markdown table defined by a
 // *.table-template.json mapping and writes the generated output file in the
-// selected format. See docs/reference/table-mapping.md for the mapping schema.
+// selected format. See docs/reference/table_mapping.md for the mapping schema.
 //
 // Generation creates a .table-sync.bak backup of any existing output.
 import * as path from 'path';
