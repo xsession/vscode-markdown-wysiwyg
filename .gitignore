@@ -26,3 +26,6 @@ ckeditor5-build-markdown/genereated/
 
 # MkDocs build output
 site/
+
+# Python virtual environments used for docs and bundling scripts
+.venv*/

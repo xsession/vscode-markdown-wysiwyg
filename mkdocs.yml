@@ -6,6 +6,8 @@ site_description: >-
 docs_dir: docs
 site_dir: site
 strict: true
+repo_url: https://github.com/xsession/vscode-markdown-wysiwyg
+repo_name: xsession/vscode-markdown-wysiwyg
 
 theme:
   name: material

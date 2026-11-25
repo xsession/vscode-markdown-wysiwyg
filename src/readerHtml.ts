@@ -8,7 +8,8 @@ export function readerHtml(): string {
 <style nonce="${nonce}">
 body{font-family:var(--vscode-font-family,system-ui);color:var(--vscode-foreground,#eee);background:var(--vscode-editor-background,#181b21);padding:16px;line-height:1.6;max-width:1000px;margin:auto}
 button,select,input{font:inherit;padding:7px;margin:4px;max-width:100%;box-sizing:border-box;color:var(--vscode-input-foreground,#eee);background:var(--vscode-input-background,#252b36);border:1px solid var(--vscode-panel-border,#657084);border-radius:4px}
-button{cursor:pointer}button:focus-visible,select:focus-visible,input:focus-visible,summary:focus-visible{outline:3px solid var(--vscode-focusBorder,#81b8ff);outline-offset:2px}
+button{cursor:pointer;transition:filter 120ms ease}button:hover{filter:brightness(1.18)}button:active{filter:brightness(0.92)}button:focus-visible,select:focus-visible,input:focus-visible,summary:focus-visible{outline:3px solid var(--vscode-focusBorder,#81b8ff);outline-offset:2px}
+body.vscode-dark,body.vscode-high-contrast{color-scheme:dark}body.vscode-light{color-scheme:light}
 section,details{border:1px solid var(--vscode-panel-border,#657084);padding:12px;margin:12px 0;border-radius:8px}h1,h2{line-height:1.3}h1{font-size:1.5em}h2{font-size:1.1em}audio{width:100%}#text{white-space:pre-wrap}#outline,#results,#marks{width:100%}.hint{opacity:.85;font-size:.9em}#context{font-weight:600}fieldset{border:1px solid var(--vscode-panel-border,#657084);border-radius:6px;margin-top:12px}fieldset label{margin-right:12px;padding:3px 0}summary{cursor:pointer}label{display:inline-block}#sleep{width:5em}.primary{background:var(--vscode-button-background,#225da7);color:var(--vscode-button-foreground,#fff)}
 ${workspaceStyles()}
 </style></head><body>

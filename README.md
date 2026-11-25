@@ -1,5 +1,9 @@
 # Markdown Editor and Listening Workspace
 
+[![Validate extension](https://github.com/xsession/vscode-markdown-wysiwyg/actions/workflows/validate.yml/badge.svg)](https://github.com/xsession/vscode-markdown-wysiwyg/actions/workflows/validate.yml)
+[![License: GPL v3](https://img.shields.io/badge/license-GPLv3-blue.svg)](LICENSE.txt)
+[![VS Code 1.105+](https://img.shields.io/badge/VS%20Code-1.105%2B-0078d4.svg)](https://code.visualstudio.com/)
+
 A VS Code extension for engineers who write, read and maintain technical
 documentation. Everything runs locally: no document text, source code or
 speech is sent to a service.
@@ -21,7 +25,34 @@ speech is sent to a service.
 - **Table synchronization**: bind a Markdown table to a configuration file in
   one of eleven formats.
 
-![The codebase map](docs/assets/images/codebase_map_light.png)
+<picture>
+  <source media="(prefers-color-scheme: dark)" srcset="docs/assets/images/codebase_map_dark.png">
+  <source media="(prefers-color-scheme: light)" srcset="docs/assets/images/codebase_map_light.png">
+  <img alt="The codebase map: folders are islands, files are hills, imports are roads" src="docs/assets/images/codebase_map_light.png">
+</picture>
+
+<table>
+  <tr>
+    <td>
+      <picture>
+        <source media="(prefers-color-scheme: dark)" srcset="docs/assets/images/editor_dark.png">
+        <img alt="The WYSIWYG Markdown editor" src="docs/assets/images/editor_light.png">
+      </picture>
+    </td>
+    <td>
+      <picture>
+        <source media="(prefers-color-scheme: dark)" srcset="docs/assets/images/mindmap_dark.png">
+        <img alt="The documentation mind map" src="docs/assets/images/mindmap_light.png">
+      </picture>
+    </td>
+    <td>
+      <picture>
+        <source media="(prefers-color-scheme: dark)" srcset="docs/assets/images/reader_dark.png">
+        <img alt="The offline listening reader" src="docs/assets/images/reader_light.png">
+      </picture>
+    </td>
+  </tr>
+</table>
 
 ## Documentation
 

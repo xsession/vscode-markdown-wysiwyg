@@ -1,61 +1,18 @@
+# Everything is excluded by default; only the negated paths below are packaged.
 **/*
+# --- Extension bundle ---
 !**/dist/**/*
 !LICENSE.txt
 !ckeditor5-build-markdown/build/**/*
 !**/src/markdownEditorInitScript.js
+!media/**/*
+!schemas/**/*
+!templates/**/*
+# --- Documentation pages opened inside VS Code ---
 !docs/about/listening_research.md
 !docs/about/third_party/**/*
-
-
-!media/**/*
-
-
-
-
-
-
-
-
-
-
-!schemas/**/*
+# --- Example workspace for the table-sync feature ---
 !examples/table-sync/**/*
-!templates/**/*
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
 # BEGIN DOCUMENT PARSER DEPENDENCIES
 !node_modules/@iarna/rtf-to-html/**/*
 !node_modules/@thednp/dommatrix/**/*
@@ -99,7 +56,6 @@
 !node_modules/util-deprecate/**/*
 !node_modules/xmlbuilder/**/*
 # END DOCUMENT PARSER DEPENDENCIES
-
 # BEGIN VERIFIED OFFLINE ASSETS
 !resources/bundled-voices.json
 !resources/runtime/licenses/espeak-ng-GPL3.txt
